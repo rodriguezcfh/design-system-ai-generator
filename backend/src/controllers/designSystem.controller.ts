@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import * as dsService from '../services/designSystem.service'
+import * as generationService from '../services/generation.service'
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -38,6 +39,26 @@ export async function getById(req: Request, res: Response): Promise<void> {
     }
     res.status(200).json(result)
   } catch {
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+export async function generate(req: Request, res: Response): Promise<void> {
+  try {
+    const result = await generationService.generateForDesignSystem(
+      res.locals.userId as string,
+      req.params.id,
+    )
+    res.status(200).json(result)
+  } catch (err) {
+    if (err instanceof generationService.NotFoundError) {
+      res.status(404).json({ error: err.message })
+      return
+    }
+    if (err instanceof generationService.BriefNotReadyError) {
+      res.status(422).json({ error: err.message })
+      return
+    }
     res.status(500).json({ error: 'Internal server error' })
   }
 }

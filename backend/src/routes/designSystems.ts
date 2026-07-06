@@ -8,10 +8,7 @@ router.post('/', requireAuth, dsController.create)
 router.get('/', requireAuth, dsController.list)
 router.get('/:id', requireAuth, dsController.getById)
 
-// Stubs — implemented in H3 and H4
-router.post('/:id/generate', requireAuth, (_req, res) => {
-  res.status(501).json({ message: 'Not implemented' })
-})
+router.post('/:id/generate', requireAuth, dsController.generate)
 router.post('/:id/export', requireAuth, (_req, res) => {
   res.status(501).json({ message: 'Not implemented' })
 })

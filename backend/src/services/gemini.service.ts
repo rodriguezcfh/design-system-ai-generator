@@ -50,3 +50,69 @@ export async function extractBrief(messages: ChatMessage[]): Promise<BriefExtrac
 
   return JSON.parse(result.response.text()) as BriefExtraction
 }
+
+// ─── Design System Generation ───────────────────────────────────────────────
+
+const GENERATION_INSTRUCTION = `You are a design system generator. Given a brand brief, produce a complete set of
+design tokens and a React + Tailwind CSS Button component.
+
+Respond ONLY with valid JSON (no markdown, no extra text) in this exact shape:
+{
+  "colors": {
+    "primary": "#hex",
+    "primaryForeground": "#hex",
+    "secondary": "#hex",
+    "secondaryForeground": "#hex",
+    "background": "#hex",
+    "foreground": "#hex",
+    "muted": "#hex",
+    "mutedForeground": "#hex",
+    "error": "#hex",
+    "errorForeground": "#hex"
+  },
+  "typography": {
+    "fontFamily": "Inter, sans-serif",
+    "fontFamilyDisplay": "Inter, sans-serif",
+    "sizes": { "xs": "0.75rem", "sm": "0.875rem", "base": "1rem", "lg": "1.125rem", "xl": "1.25rem", "2xl": "1.5rem" },
+    "weights": { "normal": "400", "medium": "500", "semibold": "600", "bold": "700" },
+    "lineHeights": { "tight": "1.25", "normal": "1.5", "relaxed": "1.75" }
+  },
+  "buttonComponent": "// full React + Tailwind Button component code as a single escaped string"
+}
+
+CRITICAL for colors: ensure ALL text/foreground colors meet WCAG 2.1 AA contrast ratio (≥4.5:1) against
+their paired background. Use the Tailwind token class names (bg-primary, text-primary-foreground, etc.)
+in the buttonComponent — never hardcoded hex values.
+
+The buttonComponent must export a Button with variants (primary, secondary, ghost),
+sizes (sm, md, lg), and states (default, hover, active, disabled, focus-visible).`
+
+export type GeneratedDesignSystem = {
+  colors: Record<string, string>
+  typography: Record<string, unknown>
+  buttonComponent: string
+}
+
+type BriefInput = {
+  tone: string | null
+  values: string[]
+  references: string[]
+}
+
+export async function generateDesignSystem(brief: BriefInput): Promise<GeneratedDesignSystem> {
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    systemInstruction: GENERATION_INSTRUCTION,
+    generationConfig: { responseMimeType: 'application/json' },
+  })
+
+  const prompt = `Brand brief:
+- Tone: ${brief.tone ?? 'not specified'}
+- Values: ${brief.values.length ? brief.values.join(', ') : 'not specified'}
+- References / inspirations: ${brief.references.length ? brief.references.join(', ') : 'none'}
+
+Generate the design system tokens and Button component.`
+
+  const result = await model.generateContent(prompt)
+  return JSON.parse(result.response.text()) as GeneratedDesignSystem
+}
