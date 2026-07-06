@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  designSystems   DesignSystem[]
+  githubConnection GithubConnection?
+
+  @@map("users")
+}
+
+model DesignSystem {
+  id        String             @id @default(cuid())
+  userId    String             @map("user_id")
+  name      String
+  status    DesignSystemStatus @default(DRAFT)
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation?
+  brandBrief   BrandBrief?
+  tokens       DesignTokens?
+  repository   Repository?
+  exports      Export[]
+
+  @@map("design_systems")
+}
+
+enum DesignSystemStatus {
+  DRAFT
+  GENERATED
+  APPROVED
+  EXPORTED
+}
+
+model Conversation {
+  id             String   @id @default(cuid())
+  designSystemId String   @unique @map("design_system_id")
+  messages       Json     @default("[]")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  designSystem DesignSystem @relation(fields: [designSystemId], references: [id], onDelete: Cascade)
+  attachments  Attachment[]
+
+  @@map("conversations")
+}
+
+model Attachment {
+  id             String   @id @default(cuid())
+  conversationId String   @map("conversation_id")
+  filename       String
+  mimeType       String   @map("mime_type")
+  storagePath    String   @map("storage_path")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model BrandBrief {
+  id             String   @id @default(cuid())
+  designSystemId String   @unique @map("design_system_id")
+  tone           String?
+  values         Json     @default("[]")
+  references     Json     @default("[]")
+  rawSummary     String?  @map("raw_summary")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  designSystem DesignSystem @relation(fields: [designSystemId], references: [id], onDelete: Cascade)
+
+  @@map("brand_briefs")
+}
+
+model DesignTokens {
+  id             String   @id @default(cuid())
+  designSystemId String   @unique @map("design_system_id")
+  colors         Json     @default("{}")
+  typography     Json     @default("{}")
+  componentCode  String?  @map("component_code")
+  wcagValid      Boolean  @default(false) @map("wcag_valid")
+  wcagReport     Json?    @map("wcag_report")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  designSystem DesignSystem @relation(fields: [designSystemId], references: [id], onDelete: Cascade)
+
+  @@map("design_tokens")
+}
+
+// GitHub token is stored encrypted — decryption happens only in the service layer
+// before calling the GitHub API. Never exposed to the frontend or logged.
+model GithubConnection {
+  id             String    @id @default(cuid())
+  userId         String    @unique @map("user_id")
+  accessToken    String    @map("access_token")
+  githubUsername String    @map("github_username")
+  scope          String    @default("repo")
+  connectedAt    DateTime  @default(now()) @map("connected_at")
+  revokedAt      DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("github_connections")
+}
+
+model Repository {
+  id             String     @id @default(cuid())
+  designSystemId String     @unique @map("design_system_id")
+  repoFullName   String     @map("repo_full_name")
+  visibility     Visibility @default(PRIVATE)
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  designSystem DesignSystem @relation(fields: [designSystemId], references: [id], onDelete: Cascade)
+
+  @@map("repositories")
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}
+
+model Export {
+  id             String      @id @default(cuid())
+  designSystemId String      @map("design_system_id")
+  type           ExportType
+  branchName     String?     @map("branch_name")
+  prNumber       Int?        @map("pr_number")
+  prUrl          String?     @map("pr_url")
+  prTitle        String?     @map("pr_title")
+  prBody         String?     @map("pr_body")
+  status         PrStatus?
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  designSystem DesignSystem @relation(fields: [designSystemId], references: [id], onDelete: Cascade)
+
+  @@map("exports")
+}
+
+enum ExportType {
+  INITIAL
+  UPDATE
+}
+
+enum PrStatus {
+  OPEN
+  MERGED
+  CLOSED
+}
