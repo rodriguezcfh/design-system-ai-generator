@@ -1,8 +1,10 @@
 import { Router } from 'express'
+import { requireAuth } from '../middleware/auth'
+import * as githubController from '../controllers/github.controller'
 
 const router = Router()
 
-// GET /api/auth/github — inicia el flujo OAuth
+// GET /api/auth/github — inicia el flujo OAuth (no requiere auth previa)
 router.get('/', (_req, res) => {
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_CLIENT_ID ?? '',
@@ -12,9 +14,7 @@ router.get('/', (_req, res) => {
   res.redirect(`https://github.com/login/oauth/authorize?${params}`)
 })
 
-// GET /api/auth/github/callback — recibe el code, canjea por access_token
-router.get('/callback', (_req, res) => {
-  res.status(501).json({ message: 'Not implemented' })
-})
+// GET /api/auth/github/callback — recibe el code de GitHub, requiere JWT del usuario
+router.get('/callback', requireAuth, githubController.oauthCallback)
 
 export default router

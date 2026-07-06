@@ -99,6 +99,30 @@ type BriefInput = {
   references: string[]
 }
 
+export type PRDescription = { title: string; body: string }
+
+export async function generatePRDescription(params: {
+  changedTokenKeys: string[]
+  hasComponentChanges: boolean
+  dsName: string
+}): Promise<PRDescription> {
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: { responseMimeType: 'application/json' },
+  })
+
+  const prompt = `Write a clear, technical Pull Request title and description for a design system update.
+
+Design system: ${params.dsName}
+Changed tokens: ${params.changedTokenKeys.join(', ')}
+Component changes: ${params.hasComponentChanges ? 'Yes — Button component updated' : 'No'}
+
+Respond with JSON: { "title": "string (max 72 chars, present tense)", "body": "markdown string with what changed and why" }`
+
+  const result = await model.generateContent(prompt)
+  return JSON.parse(result.response.text()) as PRDescription
+}
+
 export async function generateDesignSystem(brief: BriefInput): Promise<GeneratedDesignSystem> {
   const model = genAI.getGenerativeModel({
     model: 'gemini-1.5-flash',
