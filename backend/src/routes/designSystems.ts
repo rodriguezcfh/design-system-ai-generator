@@ -1,29 +1,21 @@
 import { Router } from 'express'
+import { requireAuth } from '../middleware/auth'
+import * as dsController from '../controllers/designSystem.controller'
 
 const router = Router()
 
-// GET /api/design-systems
-router.get('/', (_req, res) => {
+router.post('/', requireAuth, dsController.create)
+router.get('/', requireAuth, dsController.list)
+router.get('/:id', requireAuth, dsController.getById)
+
+// Stubs — implemented in H3 and H4
+router.post('/:id/generate', requireAuth, (_req, res) => {
   res.status(501).json({ message: 'Not implemented' })
 })
-
-// GET /api/design-systems/:id
-router.get('/:id', (_req, res) => {
+router.post('/:id/export', requireAuth, (_req, res) => {
   res.status(501).json({ message: 'Not implemented' })
 })
-
-// POST /api/design-systems/:id/generate
-router.post('/:id/generate', (_req, res) => {
-  res.status(501).json({ message: 'Not implemented' })
-})
-
-// POST /api/design-systems/:id/export
-router.post('/:id/export', (_req, res) => {
-  res.status(501).json({ message: 'Not implemented' })
-})
-
-// GET /api/design-systems/:id/exports
-router.get('/:id/exports', (_req, res) => {
+router.get('/:id/exports', requireAuth, (_req, res) => {
   res.status(501).json({ message: 'Not implemented' })
 })
 
