@@ -29,6 +29,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       res.status(404).json({ error: err.message })
       return
     }
+    console.error('Error sending chat message:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -55,6 +56,7 @@ export async function saveAttachment(req: Request, res: Response): Promise<void>
       res.status(404).json({ error: err.message })
       return
     }
+    console.error('Error saving chat attachment:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }

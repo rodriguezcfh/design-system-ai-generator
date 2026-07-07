@@ -26,6 +26,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
       res.status(409).json({ error: err.message })
       return
     }
+    console.error('Error during signup:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -44,6 +45,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       res.status(401).json({ error: err.message })
       return
     }
+    console.error('Error during login:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }

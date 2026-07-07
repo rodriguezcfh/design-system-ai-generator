@@ -34,7 +34,7 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string }
 
 export async function extractBrief(messages: ChatMessage[]): Promise<BriefExtraction> {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash',
     systemInstruction: SYSTEM_INSTRUCTION,
     generationConfig: { responseMimeType: 'application/json' },
   })
@@ -107,7 +107,7 @@ export async function generatePRDescription(params: {
   dsName: string
 }): Promise<PRDescription> {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash',
     generationConfig: { responseMimeType: 'application/json' },
   })
 
@@ -125,7 +125,7 @@ Respond with JSON: { "title": "string (max 72 chars, present tense)", "body": "m
 
 export async function generateDesignSystem(brief: BriefInput): Promise<GeneratedDesignSystem> {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash',
     systemInstruction: GENERATION_INSTRUCTION,
     generationConfig: { responseMimeType: 'application/json' },
   })

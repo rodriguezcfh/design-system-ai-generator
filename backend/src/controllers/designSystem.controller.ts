@@ -17,7 +17,8 @@ export async function create(req: Request, res: Response): Promise<void> {
   try {
     const ds = await dsService.createDesignSystem(res.locals.userId as string, parsed.data.name)
     res.status(201).json(ds)
-  } catch {
+  } catch (err) {
+    console.error('Error creating design system:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -26,7 +27,8 @@ export async function list(req: Request, res: Response): Promise<void> {
   try {
     const systems = await dsService.listDesignSystems(res.locals.userId as string)
     res.status(200).json(systems)
-  } catch {
+  } catch (err) {
+    console.error('Error listing design systems:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -39,7 +41,8 @@ export async function getById(req: Request, res: Response): Promise<void> {
       return
     }
     res.status(200).json(result)
-  } catch {
+  } catch (err) {
+    console.error('Error fetching design system:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -72,6 +75,7 @@ export async function exportDS(req: Request, res: Response): Promise<void> {
     } else if (err instanceof exportService.RepoConflictError) {
       res.status(409).json({ error: err.message, suggestedName: err.suggestedName })
     } else {
+      console.error('Error exporting design system:', err)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -86,6 +90,7 @@ export async function listExports(req: Request, res: Response): Promise<void> {
       res.status(404).json({ error: err.message })
       return
     }
+    console.error('Error listing exports:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -106,6 +111,7 @@ export async function generate(req: Request, res: Response): Promise<void> {
       res.status(422).json({ error: err.message })
       return
     }
+    console.error('Error generating design system:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
