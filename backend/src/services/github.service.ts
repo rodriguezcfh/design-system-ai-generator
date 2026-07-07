@@ -59,6 +59,14 @@ export async function getDecryptedToken(
   return { token: decrypt(connection.accessToken), login: connection.githubUsername }
 }
 
+export async function getConnectionStatus(
+  userId: string,
+): Promise<{ connected: boolean; username?: string }> {
+  const connection = await prisma.githubConnection.findUnique({ where: { userId } })
+  if (!connection || connection.revokedAt) return { connected: false }
+  return { connected: true, username: connection.githubUsername }
+}
+
 // ─── Repository operations ───────────────────────────────────────────────────
 
 export async function createRepository(

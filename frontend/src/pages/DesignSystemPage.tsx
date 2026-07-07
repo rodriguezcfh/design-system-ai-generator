@@ -50,8 +50,9 @@ export default function DesignSystemPage() {
     Promise.all([
       api.designSystems.get(id),
       api.designSystems.exports(id),
+      api.auth.githubStatus(),
     ])
-      .then(([dsData, exportsData]) => {
+      .then(([dsData, exportsData, githubStatus]) => {
         setDsName(dsData.designSystem.name)
         setDsStatus(dsData.designSystem.status)
         if (dsData.conversation) {
@@ -63,8 +64,7 @@ export default function DesignSystemPage() {
           setWcagReport(dsData.designSystem.tokens.wcagReport as unknown as WcagReport ?? null)
         }
         setExports(exportsData)
-        // Check if github is connected by seeing if user has any exports or trying to infer
-        setIsGithubConnected(exportsData.length > 0 || dsData.designSystem.status === 'EXPORTED')
+        setIsGithubConnected(githubStatus.connected)
       })
       .catch(() => navigate('/'))
       .finally(() => setIsLoading(false))

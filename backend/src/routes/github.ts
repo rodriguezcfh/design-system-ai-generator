@@ -14,7 +14,11 @@ router.get('/', (_req, res) => {
   res.redirect(`https://github.com/login/oauth/authorize?${params}`)
 })
 
-// GET /api/auth/github/callback — recibe el code de GitHub, requiere JWT del usuario
-router.get('/callback', requireAuth, githubController.oauthCallback)
+// GET /api/auth/github/callback — recibe el code de GitHub. Es una navegación de browser
+// (redirect de GitHub), así que no puede llevar el header Authorization: el JWT viaja en `state`.
+router.get('/callback', githubController.oauthCallback)
+
+// GET /api/auth/github/status — chequeo real de si el usuario ya conectó su cuenta
+router.get('/status', requireAuth, githubController.getStatus)
 
 export default router

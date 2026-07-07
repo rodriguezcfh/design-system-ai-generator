@@ -16,6 +16,7 @@ vi.mock('../services/github.service', () => ({
   exchangeCodeForToken: vi.fn(),
   saveGithubConnection: vi.fn(),
   getDecryptedToken: vi.fn(),
+  getConnectionStatus: vi.fn(),
   createRepository: vi.fn(),
   scaffoldRepository: vi.fn(),
   createUpdatePR: vi.fn(),
@@ -36,30 +37,33 @@ const auth = { Authorization: `Bearer ${validToken}` }
 describe('GET /api/auth/github/callback', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('exchanges code and redirects to frontend on success', async () => {
+  it('exchanges code and redirects to frontend on success, using state (not header) for auth', async () => {
     vi.mocked(githubService.exchangeCodeForToken).mockResolvedValue({
       accessToken: 'ghs_token123',
       login: 'octocat',
     })
     vi.mocked(githubService.saveGithubConnection).mockResolvedValue(undefined)
 
+    // No Authorization header set — this simulates GitHub's real browser redirect.
     const res = await request(app)
       .get('/api/auth/github/callback')
-      .set(auth)
-      .query({ code: 'valid-code' })
+      .query({ code: 'valid-code', state: validToken })
 
     expect(res.status).toBe(302)
     expect(res.headers.location).toContain('github/connected')
     expect(githubService.exchangeCodeForToken).toHaveBeenCalledWith('valid-code')
+    expect(githubService.saveGithubConnection).toHaveBeenCalledWith('user-1', 'ghs_token123', 'octocat')
   })
 
   it('returns 400 if code is missing', async () => {
-    const res = await request(app).get('/api/auth/github/callback').set(auth)
+    const res = await request(app)
+      .get('/api/auth/github/callback')
+      .query({ state: validToken })
     expect(res.status).toBe(400)
     expect(res.body).toHaveProperty('error')
   })
 
-  it('returns 401 if no JWT', async () => {
+  it('returns 401 if state is missing or not a valid JWT', async () => {
     const res = await request(app).get('/api/auth/github/callback').query({ code: 'xyz' })
     expect(res.status).toBe(401)
   })
@@ -69,9 +73,35 @@ describe('GET /api/auth/github/callback', () => {
 
     const res = await request(app)
       .get('/api/auth/github/callback')
-      .set(auth)
-      .query({ code: 'invalid-code' })
+      .query({ code: 'invalid-code', state: validToken })
 
     expect(res.status).toBe(500)
+  })
+})
+
+describe('GET /api/auth/github/status', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('returns connected: true with username when the user has a github connection', async () => {
+    vi.mocked(githubService.getConnectionStatus).mockResolvedValue({ connected: true, username: 'octocat' })
+
+    const res = await request(app).get('/api/auth/github/status').set(auth)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ connected: true, username: 'octocat' })
+  })
+
+  it('returns connected: false when the user has no github connection', async () => {
+    vi.mocked(githubService.getConnectionStatus).mockResolvedValue({ connected: false })
+
+    const res = await request(app).get('/api/auth/github/status').set(auth)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ connected: false })
+  })
+
+  it('returns 401 with no token', async () => {
+    const res = await request(app).get('/api/auth/github/status')
+    expect(res.status).toBe(401)
   })
 })

@@ -113,6 +113,7 @@ export const api = {
       apiFetch<{ token: string; user: User }>('/auth/login', {
         method: 'POST', body: JSON.stringify({ email, password }),
       }),
+    githubStatus: () => apiFetch<{ connected: boolean; username?: string }>('/auth/github/status'),
   },
 
   designSystems: {
