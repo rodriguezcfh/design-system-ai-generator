@@ -37,6 +37,16 @@ ${colorEntries}
 `
 }
 
+export function buildPostcssConfig(): string {
+  return `module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+`
+}
+
 export function buildPackageJson(repoName: string): string {
   return JSON.stringify(
     {
