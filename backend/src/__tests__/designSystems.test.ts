@@ -104,4 +104,30 @@ describe('GET /api/design-systems/:id', () => {
 
     expect(res.status).toBe(404)
   })
+
+  it('includes previously generated tokens so the frontend does not need to regenerate', async () => {
+    const fakeTokens = {
+      id: 'tok-1', designSystemId: 'ds-1',
+      colors: { primary: '#1a56db' }, typography: { fontFamily: 'Inter' },
+      colorScales: null, typographyScale: [],
+      componentCode: '<Button />', wcagValid: true, wcagReport: { allPass: true, checks: [] },
+      createdAt: new Date(), updatedAt: new Date(),
+    }
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue({ ...fakeDS, status: 'GENERATED', tokens: fakeTokens })
+    vi.mocked(prisma.conversation.findUnique).mockResolvedValue({
+      id: 'conv-1', designSystemId: 'ds-1', messages: [],
+      createdAt: new Date(), updatedAt: new Date(),
+      attachments: [],
+    })
+
+    const res = await request(app)
+      .get('/api/design-systems/ds-1')
+      .set(auth)
+
+    expect(res.status).toBe(200)
+    expect(res.body.designSystem.tokens).toMatchObject({ colors: { primary: '#1a56db' } })
+    expect(prisma.designSystem.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ select: expect.objectContaining({ tokens: true }) }),
+    )
+  })
 })
