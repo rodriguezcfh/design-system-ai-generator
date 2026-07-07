@@ -188,8 +188,8 @@ export default function DesignSystemPage() {
 
         {/* Main split layout */}
         <div className="flex-1 flex min-h-0">
-          {/* Chat — 60% */}
-          <div className="w-[60%] border-r border-zinc-200 flex flex-col min-h-0 bg-white">
+          {/* Chat — 40% */}
+          <div className="w-[40%] border-r border-zinc-200 flex flex-col min-h-0 bg-white">
             <ChatPanel
               messages={messages}
               isLoading={isChatLoading}
@@ -198,8 +198,8 @@ export default function DesignSystemPage() {
             />
           </div>
 
-          {/* Preview + Export — 40% */}
-          <div className="w-[40%] flex flex-col min-h-0 bg-surface-raised">
+          {/* Preview + Export — 60% */}
+          <div className="w-[60%] flex flex-col min-h-0 bg-surface-raised">
             {/* Tabs */}
             <div className="bg-white border-b border-zinc-200 flex shrink-0">
               {(['preview', 'export'] as const).map(tab => (

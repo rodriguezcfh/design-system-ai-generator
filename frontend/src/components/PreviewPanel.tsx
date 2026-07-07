@@ -236,20 +236,23 @@ export function PreviewPanel({ tokens, wcagReport, isGenerating }: Props) {
   const scales = tokens.colorScales
 
   return (
-    <div className="overflow-y-auto p-4 space-y-8 animate-fade-up">
-      {/* WCAG Banner */}
-      <div className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-sans font-medium
-        ${allPass
-          ? 'bg-green-50 text-green-700 border border-green-200'
-          : 'bg-red-50 text-red-700 border border-red-200'
-        }`}>
-        <span className="text-base">{allPass ? '✅' : '⚠️'}</span>
-        {allPass
-          ? 'Paleta aprobada — cumple WCAG 2.1 AA'
-          : 'Algunos colores no pasan el contraste WCAG AA — ajustá antes de exportar'
-        }
+    <div className="flex flex-col h-full">
+      {/* WCAG Banner — fixed header, outside the scrollable area */}
+      <div className="shrink-0 p-4 pb-0">
+        <div className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-sans font-medium
+          ${allPass
+            ? 'bg-green-50 text-green-700 border border-green-200'
+            : 'bg-red-50 text-red-700 border border-red-200'
+          }`}>
+          <span className="text-base">{allPass ? '✅' : '⚠️'}</span>
+          {allPass
+            ? 'Paleta aprobada — cumple WCAG 2.1 AA'
+            : 'Algunos colores no pasan el contraste WCAG AA — ajustá antes de exportar'
+          }
+        </div>
       </div>
 
+      <div className="flex-1 overflow-y-auto p-4 space-y-8 animate-fade-up">
       {/* Foundation header */}
       <div>
         <p className="text-[11px] font-mono font-semibold text-accent uppercase tracking-wider mb-1.5">
@@ -341,6 +344,7 @@ export function PreviewPanel({ tokens, wcagReport, isGenerating }: Props) {
           </div>
         </section>
       )}
+      </div>
     </div>
   )
 }

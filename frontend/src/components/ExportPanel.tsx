@@ -102,7 +102,7 @@ export function ExportPanel({ dsId, status, exports, onExport, onConnectGitHub, 
   const notGenerated = status === 'DRAFT'
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="h-full overflow-y-auto p-4 space-y-4">
       {/* Connect GitHub or Export button */}
       {!isGithubConnected ? (
         <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 space-y-3 animate-fade-up">
