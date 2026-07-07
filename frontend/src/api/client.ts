@@ -50,6 +50,22 @@ export type WcagCheck = {
 
 export type WcagReport = { allPass: boolean; checks: WcagCheck[] }
 
+export type Shade = '50' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900'
+
+export type ColorScaleFamily = { familyName: string; shades: Record<Shade, string> }
+
+export type ColorScales = { primary: ColorScaleFamily; accent: ColorScaleFamily; neutral: ColorScaleFamily }
+
+export type TypographyStyle = {
+  name: string
+  description: string
+  sizePx: number
+  sizeRem: number
+  weightName: string
+  weightValue: number
+  role: 'display' | 'heading' | 'body'
+}
+
 export type DesignTokens = {
   id: string
   colors: ColorTokens
@@ -60,6 +76,8 @@ export type DesignTokens = {
     weights?: Record<string, string>
     lineHeights?: Record<string, string>
   }
+  colorScales?: ColorScales | null
+  typographyScale?: TypographyStyle[] | null
   componentCode: string | null
   wcagValid: boolean
   wcagReport: WcagReport | null

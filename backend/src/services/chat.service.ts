@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma'
 import { extractBrief } from './gemini.service'
 
@@ -29,6 +30,7 @@ export async function sendMessage(userId: string, designSystemId: string, conten
   const { assistantMessage, brief } = await extractBrief(
     updatedHistory.map((m) => ({ role: m.role, content: m.content })),
   )
+  const preferredColors = brief.preferredColors ?? Prisma.JsonNull
 
   const finalHistory: ChatMessage[] = [
     ...updatedHistory,
@@ -46,12 +48,18 @@ export async function sendMessage(userId: string, designSystemId: string, conten
       tone: brief.tone,
       values: brief.values,
       references: brief.references,
+      preferredColors,
+      preferredHeadingFont: brief.preferredHeadingFont,
+      preferredBodyFont: brief.preferredBodyFont,
     },
     create: {
       designSystemId,
       tone: brief.tone,
       values: brief.values,
       references: brief.references,
+      preferredColors,
+      preferredHeadingFont: brief.preferredHeadingFont,
+      preferredBodyFont: brief.preferredBodyFont,
     },
   })
 

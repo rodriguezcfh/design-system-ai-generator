@@ -18,6 +18,8 @@ const COLOR_PAIRS: [string, string, string][] = [
   ['foreground', 'background', 'Body text'],
   ['mutedForeground', 'background', 'Muted text'],
   ['errorForeground', 'error', 'Error state text'],
+  ['successForeground', 'success', 'Success state text'],
+  ['warningForeground', 'warning', 'Warning state text'],
 ]
 
 function linearize(c: number): number {

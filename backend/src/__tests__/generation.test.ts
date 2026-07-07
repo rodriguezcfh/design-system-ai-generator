@@ -29,7 +29,9 @@ const fakeDS = {
 const fakeBrief = {
   id: 'brief-1', designSystemId: 'ds-1', tone: 'warm',
   values: ['trust', 'clarity'], references: [],
-  rawSummary: null, createdAt: new Date(), updatedAt: new Date(),
+  rawSummary: null,
+  preferredColors: null, preferredHeadingFont: null, preferredBodyFont: null,
+  createdAt: new Date(), updatedAt: new Date(),
 }
 
 // Colors with good WCAG contrast
@@ -46,6 +48,11 @@ const goodColors = {
   errorForeground: '#ffffff',
 }
 
+const fakeTypographyScale = [
+  { name: 'Display', description: 'Héroe', sizePx: 48, sizeRem: 3, weightName: 'ExtraBold', weightValue: 800, role: 'display' as const },
+  { name: 'Body', description: 'Texto', sizePx: 16, sizeRem: 1, weightName: 'Regular', weightValue: 400, role: 'body' as const },
+]
+
 const fakeGeneratedDS = {
   colors: goodColors,
   typography: {
@@ -54,12 +61,14 @@ const fakeGeneratedDS = {
     sizes: { base: '1rem', lg: '1.125rem' },
     weights: { normal: '400', bold: '700' },
   },
+  typographyScale: fakeTypographyScale,
   buttonComponent: 'export function Button() { return <button>Click</button> }',
 }
 
 const fakeTokensRecord = {
   id: 'tok-1', designSystemId: 'ds-1',
   colors: goodColors, typography: fakeGeneratedDS.typography,
+  colorScales: null, typographyScale: fakeTypographyScale,
   componentCode: fakeGeneratedDS.buttonComponent,
   wcagValid: true, wcagReport: {},
   createdAt: new Date(), updatedAt: new Date(),
@@ -82,6 +91,38 @@ describe('POST /api/design-systems/:id/generate', () => {
     expect(res.status).toBe(200)
     expect(res.body.tokens).toHaveProperty('colors')
     expect(res.body.wcagReport.allPass).toBe(true)
+  })
+
+  it('passes brief preferences to generateDesignSystem and persists computed colorScales/typographyScale', async () => {
+    const briefWithPreferences = {
+      ...fakeBrief,
+      preferredColors: ['#0077B6', '#00F5D4'],
+      preferredHeadingFont: 'Kiona',
+      preferredBodyFont: 'Montserrat',
+    }
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(briefWithPreferences)
+    vi.mocked(geminiService.generateDesignSystem).mockResolvedValue(fakeGeneratedDS)
+    vi.mocked(prisma.designTokens.upsert).mockResolvedValue(fakeTokensRecord)
+    vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'GENERATED' })
+
+    await request(app).post('/api/design-systems/ds-1/generate').set(auth)
+
+    expect(geminiService.generateDesignSystem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferredColors: ['#0077B6', '#00F5D4'],
+        preferredHeadingFont: 'Kiona',
+        preferredBodyFont: 'Montserrat',
+      }),
+    )
+
+    const upsertArg = vi.mocked(prisma.designTokens.upsert).mock.calls[0][0]
+    expect(upsertArg.create.typographyScale).toEqual(fakeTypographyScale)
+    expect(upsertArg.create.colorScales).toMatchObject({
+      primary: { familyName: expect.any(String), shades: expect.any(Object) },
+      accent: { familyName: expect.any(String), shades: expect.any(Object) },
+      neutral: { familyName: 'Neutral', shades: expect.any(Object) },
+    })
   })
 
   it('returns 200 with wcagReport.allPass false when colors fail contrast', async () => {

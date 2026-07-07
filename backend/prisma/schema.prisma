@@ -72,14 +72,17 @@ model Attachment {
 }
 
 model BrandBrief {
-  id             String   @id @default(cuid())
-  designSystemId String   @unique @map("design_system_id")
-  tone           String?
-  values         Json     @default("[]")
-  references     Json     @default("[]")
-  rawSummary     String?  @map("raw_summary")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id                   String   @id @default(cuid())
+  designSystemId       String   @unique @map("design_system_id")
+  tone                 String?
+  values               Json     @default("[]")
+  references           Json     @default("[]")
+  rawSummary           String?  @map("raw_summary")
+  preferredColors      Json?    @map("preferred_colors")
+  preferredHeadingFont String?  @map("preferred_heading_font")
+  preferredBodyFont    String?  @map("preferred_body_font")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   designSystem DesignSystem @relation(fields: [designSystemId], references: [id], onDelete: Cascade)
 
@@ -87,15 +90,17 @@ model BrandBrief {
 }
 
 model DesignTokens {
-  id             String   @id @default(cuid())
-  designSystemId String   @unique @map("design_system_id")
-  colors         Json     @default("{}")
-  typography     Json     @default("{}")
-  componentCode  String?  @map("component_code")
-  wcagValid      Boolean  @default(false) @map("wcag_valid")
-  wcagReport     Json?    @map("wcag_report")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  designSystemId  String   @unique @map("design_system_id")
+  colors          Json     @default("{}")
+  typography      Json     @default("{}")
+  colorScales     Json?    @map("color_scales")
+  typographyScale Json?    @map("typography_scale")
+  componentCode   String?  @map("component_code")
+  wcagValid       Boolean  @default(false) @map("wcag_valid")
+  wcagReport      Json?    @map("wcag_report")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   designSystem DesignSystem @relation(fields: [designSystemId], references: [id], onDelete: Cascade)
 

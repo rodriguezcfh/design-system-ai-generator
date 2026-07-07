@@ -1,4 +1,5 @@
-import type { DesignTokens, WcagReport } from '../api/client'
+import type { ReactNode } from 'react'
+import type { ColorScaleFamily, DesignTokens, Shade, TypographyStyle, WcagReport } from '../api/client'
 
 type Props = {
   tokens: DesignTokens | null
@@ -6,51 +7,130 @@ type Props = {
   isGenerating: boolean
 }
 
-const TOKEN_LABELS: Record<string, string> = {
-  primary: 'Primary',
-  primaryForeground: 'Primary text',
-  secondary: 'Secondary',
-  secondaryForeground: 'Secondary text',
-  background: 'Background',
-  foreground: 'Foreground',
-  muted: 'Muted',
-  mutedForeground: 'Muted text',
-  error: 'Error',
-  errorForeground: 'Error text',
+const SHADES: Shade[] = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900']
+
+function toCssVar(key: string): string {
+  return `--${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`
 }
 
-function ColorSwatch({ name, hex, wcagReport }: { name: string; hex: string; wcagReport: WcagReport | null }) {
-  const label = TOKEN_LABELS[name] ?? name
-  const check = wcagReport?.checks.find(c =>
-    c.background === hex || c.foreground === hex,
-  )
+type ColorCardSpec = { key: string; label: string; fgKey?: string }
 
-  const isDark = (() => {
-    const r = parseInt(hex.slice(1, 3), 16)
-    const g = parseInt(hex.slice(3, 5), 16)
-    const b = parseInt(hex.slice(5, 7), 16)
-    return (r * 299 + g * 587 + b * 114) / 1000 < 128
-  })()
+function ColorCard({ label, hex, cssVar }: { label: string; hex: string; cssVar: string }) {
+  return (
+    <div className="animate-fade-up">
+      <div className="h-16 rounded-xl border border-black/5" style={{ backgroundColor: hex }} />
+      <div className="mt-2 space-y-0.5">
+        <p className="text-xs font-sans font-semibold text-ink truncate">{label}</p>
+        <p className="text-[11px] font-mono text-ink-muted">{hex}</p>
+        <p className="text-[10px] font-mono text-ink-faint">{cssVar}</p>
+      </div>
+    </div>
+  )
+}
+
+function ColorCardGrid({ specs, colors }: { specs: ColorCardSpec[]; colors: Record<string, string> }) {
+  const present = specs.filter((s) => colors[s.key])
+  if (!present.length) return null
 
   return (
-    <div className="group relative animate-fade-up">
-      <div
-        className="h-16 rounded-xl border border-black/5 transition-transform duration-200 group-hover:scale-[1.03] group-hover:shadow-md"
-        style={{ backgroundColor: hex }}
-      >
-        {check && (
-          <span className={`absolute top-2 right-2 text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-full
-            ${check.passes
-              ? 'bg-green-500/20 text-green-700'
-              : 'bg-red-500/20 text-red-700'
-            }`}>
-            {check.passes ? 'AA ✓' : 'AA ✗'}
-          </span>
-        )}
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {present.map((s) => (
+        <ColorCard key={s.key} label={s.label} hex={colors[s.key]} cssVar={toCssVar(s.key)} />
+      ))}
+    </div>
+  )
+}
+
+function SubsectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <h4 className="text-[11px] font-mono font-medium text-ink-muted uppercase tracking-wider mb-2.5">
+      {children}
+    </h4>
+  )
+}
+
+function ScaleRow({ family, roleLabel }: { family: ColorScaleFamily; roleLabel: string }) {
+  return (
+    <div>
+      <p className="text-xs font-sans font-medium text-ink mb-2">
+        {family.familyName} <span className="text-ink-muted font-normal">({roleLabel})</span>
+      </p>
+      <div className="flex gap-1.5">
+        {SHADES.map((shade) => (
+          <div key={shade} className="flex-1 text-center">
+            <div
+              className="h-10 rounded-md border border-black/5"
+              style={{ backgroundColor: family.shades[shade] }}
+            />
+            <span className="block mt-1 text-[10px] font-mono text-ink-muted">{shade}</span>
+          </div>
+        ))}
       </div>
-      <div className="mt-1.5 flex items-center justify-between px-0.5">
-        <span className="text-xs font-sans text-ink-soft truncate">{label}</span>
-        <span className="text-[10px] font-mono text-ink-muted">{hex}</span>
+    </div>
+  )
+}
+
+function resolveFontFamily(style: TypographyStyle, typography: DesignTokens['typography']): string {
+  if (style.role === 'body') return typography.fontFamily ?? 'Inter, sans-serif'
+  return typography.fontFamilyDisplay ?? typography.fontFamily ?? 'Inter, sans-serif'
+}
+
+function TypographyScaleTable({ tokens }: { tokens: DesignTokens }) {
+  const styles = [...(tokens.typographyScale ?? [])].sort((a, b) => b.sizePx - a.sizePx)
+
+  return (
+    <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
+      <div className="grid grid-cols-[1.2fr_1.4fr_1fr_1fr] gap-2 px-4 py-2 bg-zinc-50 border-b border-zinc-200">
+        {['Estilo', 'Vista previa', 'Tamaño', 'Peso'].map((h) => (
+          <span key={h} className="text-[10px] font-mono font-medium text-ink-muted uppercase tracking-wider">
+            {h}
+          </span>
+        ))}
+      </div>
+      {styles.map((style) => (
+        <div
+          key={style.name}
+          className="grid grid-cols-[1.2fr_1.4fr_1fr_1fr] gap-2 px-4 py-3 border-b border-zinc-100 last:border-b-0 items-center"
+        >
+          <div>
+            <p className="text-xs font-sans font-semibold text-ink">{style.name}</p>
+            <p className="text-[10px] font-sans text-ink-muted">{style.description}</p>
+          </div>
+          <p
+            className="text-ink truncate"
+            style={{
+              fontFamily: resolveFontFamily(style, tokens.typography),
+              fontSize: Math.min(style.sizePx, 28),
+              fontWeight: style.weightValue,
+            }}
+          >
+            Aa Bb Cc
+          </p>
+          <span className="text-[11px] font-mono text-ink-muted">
+            {style.sizePx}px / {style.sizeRem}rem
+          </span>
+          <span className="text-[11px] font-mono text-ink-muted">
+            {style.weightValue} {style.weightName}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function LegacyTypographyFallback({ tokens }: { tokens: DesignTokens }) {
+  return (
+    <div className="bg-white rounded-xl border border-zinc-200 p-4 space-y-2">
+      <p className="text-xs text-ink-muted font-sans">{tokens.typography.fontFamily ?? 'Inter, sans-serif'}</p>
+      <p className="text-2xl font-display text-ink" style={{ fontFamily: tokens.typography.fontFamily }}>
+        Aa Bb Cc
+      </p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+        {Object.entries(tokens.typography.sizes ?? {}).slice(0, 5).map(([name, size]) => (
+          <span key={name} className="font-sans text-ink-muted" style={{ fontSize: size }}>
+            {name}
+          </span>
+        ))}
       </div>
     </div>
   )
@@ -63,7 +143,7 @@ function ButtonPreview({ colors }: { colors: Record<string, string> }) {
   const secondaryFg = colors.secondaryForeground ?? '#ffffff'
   const bg = colors.background ?? '#ffffff'
   const fg = colors.foreground ?? '#09090b'
-  const border = colors.mutedForeground ?? '#71717a'
+  const border = colors.border ?? colors.mutedForeground ?? '#71717a'
 
   return (
     <div className="flex flex-wrap gap-3 items-center">
@@ -124,15 +204,39 @@ function Spinner() {
   )
 }
 
+const SEMANTIC_SPECS: ColorCardSpec[] = [
+  { key: 'primary', label: 'Primary' },
+  { key: 'secondary', label: 'Accent / Secondary' },
+  { key: 'success', label: 'Success' },
+  { key: 'warning', label: 'Warning' },
+  { key: 'error', label: 'Error / Destructive' },
+]
+
+const NEUTRAL_SPECS: ColorCardSpec[] = [
+  { key: 'foreground', label: 'Foreground' },
+  { key: 'secondaryForeground', label: 'Secondary text / FG' },
+  { key: 'mutedForeground', label: 'Muted FG' },
+  { key: 'border', label: 'Border' },
+  { key: 'muted', label: 'Muted Background' },
+]
+
+const SURFACE_SPECS: ColorCardSpec[] = [
+  { key: 'background', label: 'Background' },
+  { key: 'card', label: 'Card' },
+  { key: 'sidebar', label: 'Sidebar' },
+  { key: 'sidebarActive', label: 'Sidebar Active' },
+]
+
 export function PreviewPanel({ tokens, wcagReport, isGenerating }: Props) {
   if (isGenerating) return <Spinner />
   if (!tokens) return <EmptyState />
 
-  const colorEntries = Object.entries(tokens.colors)
   const allPass = wcagReport?.allPass ?? false
+  const totalTokens = Object.keys(tokens.colors).length
+  const scales = tokens.colorScales
 
   return (
-    <div className="overflow-y-auto p-4 space-y-6 animate-fade-up">
+    <div className="overflow-y-auto p-4 space-y-8 animate-fade-up">
       {/* WCAG Banner */}
       <div className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-sans font-medium
         ${allPass
@@ -146,38 +250,72 @@ export function PreviewPanel({ tokens, wcagReport, isGenerating }: Props) {
         }
       </div>
 
+      {/* Foundation header */}
+      <div>
+        <p className="text-[11px] font-mono font-semibold text-accent uppercase tracking-wider mb-1.5">
+          Foundation
+        </p>
+        <h2 className="text-2xl font-display font-semibold text-ink">Colors &amp; Typography</h2>
+        <p className="text-sm font-sans text-ink-muted mt-1">
+          Los tokens base que definen la identidad visual del design system.
+        </p>
+      </div>
+
       {/* Color palette */}
-      <section>
-        <h3 className="text-xs font-mono font-medium text-ink-muted uppercase tracking-wider mb-3">
-          Paleta
-        </h3>
-        <div className="grid grid-cols-2 gap-2">
-          {colorEntries.map(([name, hex]) => (
-            <ColorSwatch key={name} name={name} hex={hex} wcagReport={wcagReport} />
-          ))}
+      <section className="space-y-6">
+        <div>
+          <div className="flex items-center gap-2 pb-3 border-b border-zinc-200">
+            <h3 className="text-base font-display font-semibold text-ink">Paleta de Colores</h3>
+            <span className="text-[10px] font-mono font-medium text-ink-muted bg-zinc-100 px-2 py-0.5 rounded-full">
+              {totalTokens} tokens
+            </span>
+          </div>
         </div>
+
+        <div>
+          <SubsectionLabel>Colores semánticos</SubsectionLabel>
+          <ColorCardGrid specs={SEMANTIC_SPECS} colors={tokens.colors} />
+        </div>
+
+        <div>
+          <SubsectionLabel>Neutros</SubsectionLabel>
+          <ColorCardGrid specs={NEUTRAL_SPECS} colors={tokens.colors} />
+        </div>
+
+        <div>
+          <SubsectionLabel>Superficies</SubsectionLabel>
+          <ColorCardGrid specs={SURFACE_SPECS} colors={tokens.colors} />
+        </div>
+
+        {scales && (
+          <div>
+            <SubsectionLabel>Escalas de color</SubsectionLabel>
+            <div className="space-y-4">
+              <ScaleRow family={scales.primary} roleLabel="Primary" />
+              <ScaleRow family={scales.accent} roleLabel="Accent" />
+              <ScaleRow family={scales.neutral} roleLabel="Neutral" />
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Typography */}
-      <section>
-        <h3 className="text-xs font-mono font-medium text-ink-muted uppercase tracking-wider mb-3">
-          Tipografía
-        </h3>
-        <div className="bg-white rounded-xl border border-zinc-200 p-4 space-y-2">
-          <p className="text-xs text-ink-muted font-sans">
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-base font-display font-semibold text-ink">Tipografía</h3>
+          <p className="text-xs font-sans text-ink-muted mt-0.5">
             {tokens.typography.fontFamily ?? 'Inter, sans-serif'}
           </p>
-          <p className="text-2xl font-display text-ink" style={{ fontFamily: tokens.typography.fontFamily }}>
-            Aa Bb Cc
-          </p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
-            {Object.entries(tokens.typography.sizes ?? {}).slice(0, 5).map(([name, size]) => (
-              <span key={name} className="font-sans text-ink-muted" style={{ fontSize: size }}>
-                {name}
-              </span>
-            ))}
-          </div>
         </div>
+
+        {tokens.typographyScale?.length ? (
+          <div>
+            <SubsectionLabel>Escala tipográfica</SubsectionLabel>
+            <TypographyScaleTable tokens={tokens} />
+          </div>
+        ) : (
+          <LegacyTypographyFallback tokens={tokens} />
+        )}
       </section>
 
       {/* Button preview */}

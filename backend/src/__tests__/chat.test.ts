@@ -32,6 +32,7 @@ const fakeConversation = {
 const fakeBrief = {
   id: 'brief-1', designSystemId: 'ds-1', tone: 'warm',
   values: ['trust'], references: [], rawSummary: null,
+  preferredColors: null, preferredHeadingFont: null, preferredBodyFont: null,
   createdAt: new Date(), updatedAt: new Date(),
 }
 
@@ -44,7 +45,11 @@ describe('POST /api/chat/message', () => {
     vi.mocked(prisma.conversation.update).mockResolvedValue(fakeConversation)
     vi.mocked(geminiService.extractBrief).mockResolvedValue({
       assistantMessage: '¿Qué paleta de colores te imaginás?',
-      brief: { tone: 'warm', values: ['trust'], references: [], isComplete: false },
+      brief: {
+        tone: 'warm', values: ['trust'], references: [],
+        preferredColors: null, preferredHeadingFont: null, preferredBodyFont: null,
+        isComplete: false,
+      },
     })
     vi.mocked(prisma.brandBrief.upsert).mockResolvedValue(fakeBrief)
 
@@ -56,6 +61,49 @@ describe('POST /api/chat/message', () => {
     expect(res.status).toBe(200)
     expect(res.body.message).toBe('¿Qué paleta de colores te imaginás?')
     expect(res.body.brief).toMatchObject({ tone: 'warm' })
+  })
+
+  it('persists explicit preferred colors and fonts extracted from the chat message', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.conversation.upsert).mockResolvedValue(fakeConversation)
+    vi.mocked(prisma.conversation.update).mockResolvedValue(fakeConversation)
+    vi.mocked(geminiService.extractBrief).mockResolvedValue({
+      assistantMessage: '¡Genial, uso esos colores y fuentes!',
+      brief: {
+        tone: 'moderno', values: [], references: [],
+        preferredColors: ['#0077B6', '#00F5D4'],
+        preferredHeadingFont: 'Kiona',
+        preferredBodyFont: 'Montserrat',
+        isComplete: false,
+      },
+    })
+    vi.mocked(prisma.brandBrief.upsert).mockResolvedValue({
+      ...fakeBrief,
+      preferredColors: ['#0077B6', '#00F5D4'],
+      preferredHeadingFont: 'Kiona',
+      preferredBodyFont: 'Montserrat',
+    })
+
+    const res = await request(app)
+      .post('/api/chat/message')
+      .set(auth)
+      .send({
+        designSystemId: 'ds-1',
+        content: 'Quiero estos colores #0077B6 y #00F5D4, fuentes Kiona para títulos y Montserrat para textos',
+      })
+
+    expect(res.status).toBe(200)
+    const upsertArg = vi.mocked(prisma.brandBrief.upsert).mock.calls[0][0]
+    expect(upsertArg.create).toMatchObject({
+      preferredColors: ['#0077B6', '#00F5D4'],
+      preferredHeadingFont: 'Kiona',
+      preferredBodyFont: 'Montserrat',
+    })
+    expect(upsertArg.update).toMatchObject({
+      preferredColors: ['#0077B6', '#00F5D4'],
+      preferredHeadingFont: 'Kiona',
+      preferredBodyFont: 'Montserrat',
+    })
   })
 
   it('returns 400 if content is missing', async () => {
