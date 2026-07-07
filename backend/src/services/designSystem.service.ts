@@ -22,10 +22,19 @@ export async function getDesignSystem(userId: string, id: string) {
   })
   if (!ds) return null
 
-  const conversation = await prisma.conversation.findUnique({
-    where: { designSystemId: id },
-    include: { attachments: true },
-  })
+  const [conversation, brief] = await Promise.all([
+    prisma.conversation.findUnique({
+      where: { designSystemId: id },
+      include: { attachments: true },
+    }),
+    prisma.brandBrief.findUnique({
+      where: { designSystemId: id },
+      select: { isComplete: true },
+    }),
+  ])
 
-  return { designSystem: ds, conversation }
+  return {
+    designSystem: ds,
+    conversation: conversation ? { ...conversation, brief } : null,
+  }
 }

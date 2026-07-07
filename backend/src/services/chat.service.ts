@@ -51,6 +51,7 @@ export async function sendMessage(userId: string, designSystemId: string, conten
       preferredColors,
       preferredHeadingFont: brief.preferredHeadingFont,
       preferredBodyFont: brief.preferredBodyFont,
+      isComplete: brief.isComplete,
     },
     create: {
       designSystemId,
@@ -60,6 +61,7 @@ export async function sendMessage(userId: string, designSystemId: string, conten
       preferredColors,
       preferredHeadingFont: brief.preferredHeadingFont,
       preferredBodyFont: brief.preferredBodyFont,
+      isComplete: brief.isComplete,
     },
   })
 

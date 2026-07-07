@@ -81,6 +81,7 @@ model BrandBrief {
   preferredColors      Json?    @map("preferred_colors")
   preferredHeadingFont String?  @map("preferred_heading_font")
   preferredBodyFont    String?  @map("preferred_body_font")
+  isComplete           Boolean  @default(false) @map("is_complete")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 

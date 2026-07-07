@@ -12,6 +12,7 @@ vi.mock('../lib/prisma', () => ({
       findFirst: vi.fn(),
     },
     conversation: { findUnique: vi.fn() },
+    brandBrief: { findUnique: vi.fn() },
   },
 }))
 
@@ -85,6 +86,7 @@ describe('GET /api/design-systems/:id', () => {
       createdAt: new Date(), updatedAt: new Date(),
       attachments: [],
     })
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue({ isComplete: false })
 
     const res = await request(app)
       .get('/api/design-systems/ds-1')
@@ -93,6 +95,23 @@ describe('GET /api/design-systems/:id', () => {
     expect(res.status).toBe(200)
     expect(res.body.designSystem).toMatchObject({ id: 'ds-1' })
     expect(res.body).toHaveProperty('conversation')
+  })
+
+  it('nests the persisted brief completeness under conversation.brief so it survives a reload', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.conversation.findUnique).mockResolvedValue({
+      id: 'conv-1', designSystemId: 'ds-1', messages: [],
+      createdAt: new Date(), updatedAt: new Date(),
+      attachments: [],
+    })
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue({ isComplete: true })
+
+    const res = await request(app)
+      .get('/api/design-systems/ds-1')
+      .set(auth)
+
+    expect(res.status).toBe(200)
+    expect(res.body.conversation.brief).toEqual({ isComplete: true })
   })
 
   it('returns 404 if not found or not owned', async () => {
@@ -119,6 +138,7 @@ describe('GET /api/design-systems/:id', () => {
       createdAt: new Date(), updatedAt: new Date(),
       attachments: [],
     })
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue({ isComplete: true })
 
     const res = await request(app)
       .get('/api/design-systems/ds-1')

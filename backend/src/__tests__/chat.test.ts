@@ -33,6 +33,7 @@ const fakeBrief = {
   id: 'brief-1', designSystemId: 'ds-1', tone: 'warm',
   values: ['trust'], references: [], rawSummary: null,
   preferredColors: null, preferredHeadingFont: null, preferredBodyFont: null,
+  isComplete: false,
   createdAt: new Date(), updatedAt: new Date(),
 }
 
@@ -104,6 +105,32 @@ describe('POST /api/chat/message', () => {
       preferredHeadingFont: 'Kiona',
       preferredBodyFont: 'Montserrat',
     })
+  })
+
+  it('persists isComplete so the brief status survives a page reload', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.conversation.upsert).mockResolvedValue(fakeConversation)
+    vi.mocked(prisma.conversation.update).mockResolvedValue(fakeConversation)
+    vi.mocked(geminiService.extractBrief).mockResolvedValue({
+      assistantMessage: '¡Genial, ya tengo todo lo que necesito!',
+      brief: {
+        tone: 'moderno', values: ['confianza'], references: [],
+        preferredColors: null, preferredHeadingFont: null, preferredBodyFont: null,
+        isComplete: true,
+      },
+    })
+    vi.mocked(prisma.brandBrief.upsert).mockResolvedValue({ ...fakeBrief, isComplete: true })
+
+    const res = await request(app)
+      .post('/api/chat/message')
+      .set(auth)
+      .send({ designSystemId: 'ds-1', content: 'Dale, esos son todos los detalles' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.brief.isComplete).toBe(true)
+    const upsertArg = vi.mocked(prisma.brandBrief.upsert).mock.calls[0][0]
+    expect(upsertArg.create).toMatchObject({ isComplete: true })
+    expect(upsertArg.update).toMatchObject({ isComplete: true })
   })
 
   it('returns 400 if content is missing', async () => {

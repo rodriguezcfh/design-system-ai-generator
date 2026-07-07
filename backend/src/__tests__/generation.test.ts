@@ -31,6 +31,7 @@ const fakeBrief = {
   values: ['trust', 'clarity'], references: [],
   rawSummary: null,
   preferredColors: null, preferredHeadingFont: null, preferredBodyFont: null,
+  isComplete: true,
   createdAt: new Date(), updatedAt: new Date(),
 }
 
