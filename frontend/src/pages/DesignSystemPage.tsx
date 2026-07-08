@@ -42,7 +42,6 @@ export default function DesignSystemPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const hasMessages = messages.length > 0
   const generatingRef = useRef(false)
 
   useEffect(() => {
@@ -178,28 +177,27 @@ export default function DesignSystemPage() {
             <span className="text-xs font-sans text-red-500 hidden sm:block">{error}</span>
           )}
 
-          {hasMessages && (
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating || isChatLoading}
-              className="btn-primary text-xs flex items-center gap-1.5 shrink-0"
-            >
-              {isGenerating ? (
-                <>
-                  <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                  Generando…
-                </>
-              ) : (
-                <>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 3v1m0 16v1M4.22 4.22l.7.7m12.16 12.16.7.7M3 12h1m16 0h1M4.22 19.78l.7-.7M18.36 5.64l.7-.7"/>
-                    <circle cx="12" cy="12" r="4"/>
-                  </svg>
-                  Generar
-                </>
-              )}
-            </button>
-          )}
+          <button
+            onClick={handleGenerate}
+            disabled={!isBriefComplete || isGenerating || isChatLoading}
+            title={!isBriefComplete ? 'Completá el brief en el chat para habilitar la generación' : undefined}
+            className="btn-primary text-xs flex items-center gap-1.5 shrink-0"
+          >
+            {isGenerating ? (
+              <>
+                <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                Generando…
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v1m0 16v1M4.22 4.22l.7.7m12.16 12.16.7.7M3 12h1m16 0h1M4.22 19.78l.7-.7M18.36 5.64l.7-.7"/>
+                  <circle cx="12" cy="12" r="4"/>
+                </svg>
+                Generar
+              </>
+            )}
+          </button>
         </div>
 
         {/* Main split layout */}
