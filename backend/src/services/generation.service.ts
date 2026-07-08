@@ -3,9 +3,10 @@ import prisma from '../lib/prisma'
 import { generateDesignSystem } from './gemini.service'
 import { validatePalette, enforcePaletteCompliance } from './wcag.service'
 import { buildColorScaleFamily, buildNeutralScaleFamily } from '../lib/colorScale'
-import { NotFoundError, BriefNotReadyError } from '../lib/errors'
+import { assertNoTypeScriptSyntax } from '../lib/validateComponentCode'
+import { NotFoundError, BriefNotReadyError, InvalidComponentCodeError } from '../lib/errors'
 
-export { NotFoundError, BriefNotReadyError }
+export { NotFoundError, BriefNotReadyError, InvalidComponentCodeError }
 
 export async function generateForDesignSystem(userId: string, designSystemId: string) {
   const ds = await prisma.designSystem.findFirst({ where: { id: designSystemId, userId } })
@@ -22,6 +23,8 @@ export async function generateForDesignSystem(userId: string, designSystemId: st
     preferredHeadingFont: brief.preferredHeadingFont,
     preferredBodyFont: brief.preferredBodyFont,
   })
+
+  assertNoTypeScriptSyntax(generated.buttonComponent)
 
   const colors = enforcePaletteCompliance(generated.colors)
   const wcagReport = validatePalette(colors)

@@ -40,6 +40,13 @@ export class WcagFailedError extends Error {
   }
 }
 
+export class InvalidComponentCodeError extends Error {
+  constructor(reasons: string[]) {
+    super(`Generated component contains TypeScript syntax, which breaks the .jsx Storybook build: ${reasons.join('; ')}`)
+    this.name = 'InvalidComponentCodeError'
+  }
+}
+
 export class GithubNotConnectedError extends Error {
   constructor() {
     super('GitHub account not connected')

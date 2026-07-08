@@ -122,6 +122,16 @@ verbatim as fontFamilyDisplay/fontFamily — do not substitute a different font.
 The buttonComponent must export a Button with variants (primary, secondary, ghost),
 sizes (sm, md, lg), and states (default, hover, active, disabled, focus-visible).
 
+CRITICAL: buttonComponent must be plain JavaScript + JSX — it will be saved as a .jsx file and
+parsed by Storybook/Babel's JSX-only parser, which cannot handle TypeScript syntax. This means:
+- NO generics anywhere (no "forwardRef<HTMLButtonElement, ButtonProps>", no "useState<...>").
+- NO "interface" or "type X = ..." declarations.
+- NO type annotations on parameters, variables, or return types (no ": string", ": ButtonProps",
+  "): JSX.Element", no "React.FC<...>").
+- NO "as" type assertions (no "as const", "as unknown", "as SomeType").
+- NO enums.
+If you want to document props, use JSDoc comments or a propTypes object — never TypeScript.
+
 typographyScale must be ordered from largest to smallest and cover at least Display, Heading 1-4,
 and Body.`
 
