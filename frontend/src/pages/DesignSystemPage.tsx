@@ -37,6 +37,7 @@ export default function DesignSystemPage() {
   const [isChatLoading, setIsChatLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGithubConnected, setIsGithubConnected] = useState(false)
+  const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('preview')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -65,6 +66,7 @@ export default function DesignSystemPage() {
         }
         setExports(exportsData)
         setIsGithubConnected(githubStatus.connected)
+        setDeploymentUrl(dsData.designSystem.repository?.deploymentUrl ?? null)
       })
       .catch(() => navigate('/'))
       .finally(() => setIsLoading(false))
@@ -120,6 +122,7 @@ export default function DesignSystemPage() {
     if (!id) return
     const result = await api.designSystems.export(id, repoName, visibility)
     setDsStatus('EXPORTED')
+    if (result.deploymentUrl) setDeploymentUrl(result.deploymentUrl)
     // Refresh exports
     const exportsData = await api.designSystems.exports(id)
     setExports(exportsData)
@@ -229,6 +232,7 @@ export default function DesignSystemPage() {
                   onConnectGitHub={handleConnectGitHub}
                   isGithubConnected={isGithubConnected}
                   canExport={dsStatus !== 'DRAFT'}
+                  deploymentUrl={deploymentUrl}
                 />
               )}
             </div>

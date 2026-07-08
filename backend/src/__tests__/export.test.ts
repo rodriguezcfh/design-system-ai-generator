@@ -3,6 +3,7 @@ import request from 'supertest'
 import app from '../app'
 import prisma from '../lib/prisma'
 import * as githubService from '../services/github.service'
+import * as vercelService from '../services/vercel.service'
 import { signToken } from '../lib/jwt'
 
 vi.mock('../lib/prisma', () => ({
@@ -24,6 +25,12 @@ vi.mock('../services/github.service', () => ({
   createUpdatePR: vi.fn(),
 }))
 
+vi.mock('../services/vercel.service', () => ({
+  sanitizeProjectName: (name: string) => name,
+  createProject: vi.fn(),
+  triggerProductionDeploy: vi.fn(),
+}))
+
 const validToken = signToken({ userId: 'user-1' })
 const auth = { Authorization: `Bearer ${validToken}` }
 
@@ -40,7 +47,8 @@ const fakeTokens = {
 }
 const fakeRepo = {
   id: 'repo-1', designSystemId: 'ds-1', repoFullName: 'octocat/mi-brand-design-system',
-  visibility: 'PRIVATE', createdAt: new Date(),
+  visibility: 'PRIVATE', deploymentUrl: 'https://mi-brand-design-system.vercel.app',
+  vercelProjectId: 'prj_abc123', createdAt: new Date(),
 }
 const fakeExport = {
   id: 'exp-1', designSystemId: 'ds-1', type: 'INITIAL',
@@ -51,13 +59,15 @@ const fakeExport = {
 describe('POST /api/design-systems/:id/export', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('initial export — creates repo and returns repoUrl', async () => {
+  it('initial export — creates repo, deploys to Vercel, and returns repoUrl + deploymentUrl', async () => {
     vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
     vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
     vi.mocked(prisma.repository.findUnique).mockResolvedValue(null)
     vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
     vi.mocked(githubService.createRepository).mockResolvedValue({ fullName: 'octocat/mi-brand-design-system' })
     vi.mocked(githubService.scaffoldRepository).mockResolvedValue(undefined)
+    vi.mocked(vercelService.createProject).mockResolvedValue({ projectId: 'prj_abc123', productionBranch: 'main' })
+    vi.mocked(vercelService.triggerProductionDeploy).mockResolvedValue(undefined)
     vi.mocked(prisma.repository.create).mockResolvedValue(fakeRepo)
     vi.mocked(prisma.export.create).mockResolvedValue(fakeExport)
     vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'EXPORTED' })
@@ -70,6 +80,41 @@ describe('POST /api/design-systems/:id/export', () => {
     expect(res.status).toBe(201)
     expect(res.body.type).toBe('initial')
     expect(res.body.repoUrl).toContain('github.com')
+    expect(res.body.deploymentUrl).toBe('https://mi-brand-design-system.vercel.app')
+    expect(vercelService.createProject).toHaveBeenCalledWith('octocat/mi-brand-design-system', 'mi-brand-design-system')
+    expect(vercelService.triggerProductionDeploy).toHaveBeenCalledWith(
+      'mi-brand-design-system', 'octocat', 'mi-brand-design-system', 'main',
+    )
+    const createArg = vi.mocked(prisma.repository.create).mock.calls[0][0]
+    expect(createArg.data).toMatchObject({
+      deploymentUrl: 'https://mi-brand-design-system.vercel.app',
+      vercelProjectId: 'prj_abc123',
+    })
+  })
+
+  it('initial export still succeeds with deploymentUrl: null if the Vercel deployment fails', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
+    vi.mocked(prisma.repository.findUnique).mockResolvedValue(null)
+    vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
+    vi.mocked(githubService.createRepository).mockResolvedValue({ fullName: 'octocat/mi-brand-design-system' })
+    vi.mocked(githubService.scaffoldRepository).mockResolvedValue(undefined)
+    vi.mocked(vercelService.createProject).mockRejectedValue(new Error('Vercel API down'))
+    vi.mocked(prisma.repository.create).mockResolvedValue({ ...fakeRepo, deploymentUrl: null, vercelProjectId: null })
+    vi.mocked(prisma.export.create).mockResolvedValue(fakeExport)
+    vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'EXPORTED' })
+
+    const res = await request(app)
+      .post('/api/design-systems/ds-1/export')
+      .set(auth)
+      .send({ repoName: 'mi-brand-design-system', visibility: 'PRIVATE' })
+
+    expect(res.status).toBe(201)
+    expect(res.body.type).toBe('initial')
+    expect(res.body.repoUrl).toContain('github.com')
+    expect(res.body.deploymentUrl).toBeNull()
+    const createArg = vi.mocked(prisma.repository.create).mock.calls[0][0]
+    expect(createArg.data).toMatchObject({ deploymentUrl: null, vercelProjectId: null })
   })
 
   it('update export — creates branch + PR and returns prUrl', async () => {

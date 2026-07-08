@@ -9,6 +9,30 @@ type Props = {
   onConnectGitHub: () => void
   isGithubConnected: boolean
   canExport: boolean
+  deploymentUrl?: string | null
+}
+
+function LiveStorybookBanner({ url }: { url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-3 bg-ink rounded-xl p-4 hover:bg-ink/90 transition-colors animate-fade-up group"
+    >
+      <div className="w-9 h-9 rounded-lg bg-green-500/20 flex items-center justify-center shrink-0">
+        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-sans font-medium text-white">Storybook en Vivo</p>
+        <p className="text-[11px] font-mono text-zinc-400 truncate">{url.replace('https://', '')}</p>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        className="shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/>
+      </svg>
+    </a>
+  )
 }
 
 function ExportRow({ exp }: { exp: Export }) {
@@ -67,7 +91,7 @@ function ExportRow({ exp }: { exp: Export }) {
   )
 }
 
-export function ExportPanel({ dsId, status, exports, onExport, onConnectGitHub, isGithubConnected, canExport }: Props) {
+export function ExportPanel({ dsId, status, exports, onExport, onConnectGitHub, isGithubConnected, canExport, deploymentUrl }: Props) {
   const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showRepoModal, setShowRepoModal] = useState(false)
@@ -103,6 +127,8 @@ export function ExportPanel({ dsId, status, exports, onExport, onConnectGitHub, 
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
+      {deploymentUrl && <LiveStorybookBanner url={deploymentUrl} />}
+
       {/* Connect GitHub or Export button */}
       {!isGithubConnected ? (
         <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 space-y-3 animate-fade-up">

@@ -150,4 +150,27 @@ describe('GET /api/design-systems/:id', () => {
       expect.objectContaining({ select: expect.objectContaining({ tokens: true }) }),
     )
   })
+
+  it('includes the previously deployed Storybook URL so it survives a reload', async () => {
+    const fakeRepository = {
+      id: 'repo-1', designSystemId: 'ds-1', repoFullName: 'octocat/mi-brand-design-system',
+      visibility: 'PRIVATE', deploymentUrl: 'https://mi-brand-design-system.vercel.app',
+      vercelProjectId: 'prj_abc123', createdAt: new Date(),
+    }
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue({ ...fakeDS, status: 'EXPORTED', repository: fakeRepository })
+    vi.mocked(prisma.conversation.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(null)
+
+    const res = await request(app)
+      .get('/api/design-systems/ds-1')
+      .set(auth)
+
+    expect(res.status).toBe(200)
+    expect(res.body.designSystem.repository).toMatchObject({
+      deploymentUrl: 'https://mi-brand-design-system.vercel.app',
+    })
+    expect(prisma.designSystem.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ select: expect.objectContaining({ repository: true }) }),
+    )
+  })
 })

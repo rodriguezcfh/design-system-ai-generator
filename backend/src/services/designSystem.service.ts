@@ -18,7 +18,7 @@ export async function listDesignSystems(userId: string) {
 export async function getDesignSystem(userId: string, id: string) {
   const ds = await prisma.designSystem.findFirst({
     where: { id, userId },
-    select: { id: true, name: true, status: true, createdAt: true, updatedAt: true, tokens: true },
+    select: { id: true, name: true, status: true, createdAt: true, updatedAt: true, tokens: true, repository: true },
   })
   if (!ds) return null
 

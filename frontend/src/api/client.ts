@@ -96,8 +96,10 @@ export type Export = {
   createdAt: string
 }
 
+export type Repository = { repoFullName: string; deploymentUrl: string | null }
+
 export type DSDetail = {
-  designSystem: DesignSystem & { tokens?: DesignTokens | null }
+  designSystem: DesignSystem & { tokens?: DesignTokens | null; repository?: Repository | null }
   conversation: { id: string; messages: ChatMessage[]; brief?: { isComplete: boolean } } | null
 }
 
@@ -130,7 +132,7 @@ export const api = {
     export: (id: string, repoName?: string, visibility?: 'public' | 'private') =>
       apiFetch<{
         type: 'initial' | 'update'
-        repoUrl?: string; repoFullName?: string
+        repoUrl?: string; repoFullName?: string; deploymentUrl?: string | null
         prUrl?: string; prNumber?: number; branchName?: string
         exportId: string
       }>(`/design-systems/${id}/export`, {

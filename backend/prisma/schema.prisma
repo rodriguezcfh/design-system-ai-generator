@@ -125,11 +125,13 @@ model GithubConnection {
 }
 
 model Repository {
-  id             String     @id @default(cuid())
-  designSystemId String     @unique @map("design_system_id")
-  repoFullName   String     @map("repo_full_name")
-  visibility     Visibility @default(PRIVATE)
-  createdAt      DateTime   @default(now()) @map("created_at")
+  id              String     @id @default(cuid())
+  designSystemId  String     @unique @map("design_system_id")
+  repoFullName    String     @map("repo_full_name")
+  visibility      Visibility @default(PRIVATE)
+  deploymentUrl   String?    @map("deployment_url")
+  vercelProjectId String?    @map("vercel_project_id")
+  createdAt       DateTime   @default(now()) @map("created_at")
 
   designSystem DesignSystem @relation(fields: [designSystemId], references: [id], onDelete: Cascade)
 
