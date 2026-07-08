@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma'
 import { generateDesignSystem } from './gemini.service'
-import { validatePalette } from './wcag.service'
+import { validatePalette, enforcePaletteCompliance } from './wcag.service'
 import { buildColorScaleFamily, buildNeutralScaleFamily } from '../lib/colorScale'
 import { NotFoundError, BriefNotReadyError } from '../lib/errors'
 
@@ -23,18 +23,19 @@ export async function generateForDesignSystem(userId: string, designSystemId: st
     preferredBodyFont: brief.preferredBodyFont,
   })
 
-  const wcagReport = validatePalette(generated.colors)
+  const colors = enforcePaletteCompliance(generated.colors)
+  const wcagReport = validatePalette(colors)
 
   const colorScales = {
-    primary: buildColorScaleFamily(generated.colors.primary),
-    accent: buildColorScaleFamily(generated.colors.secondary),
-    neutral: buildNeutralScaleFamily(generated.colors.foreground),
+    primary: buildColorScaleFamily(colors.primary),
+    accent: buildColorScaleFamily(colors.secondary),
+    neutral: buildNeutralScaleFamily(colors.foreground),
   }
 
   const tokens = await prisma.designTokens.upsert({
     where: { designSystemId },
     update: {
-      colors: generated.colors as Prisma.InputJsonValue,
+      colors: colors as Prisma.InputJsonValue,
       typography: generated.typography as Prisma.InputJsonValue,
       colorScales: colorScales as unknown as Prisma.InputJsonValue,
       typographyScale: generated.typographyScale as unknown as Prisma.InputJsonValue,
@@ -44,7 +45,7 @@ export async function generateForDesignSystem(userId: string, designSystemId: st
     },
     create: {
       designSystemId,
-      colors: generated.colors as Prisma.InputJsonValue,
+      colors: colors as Prisma.InputJsonValue,
       typography: generated.typography as Prisma.InputJsonValue,
       colorScales: colorScales as unknown as Prisma.InputJsonValue,
       typographyScale: generated.typographyScale as unknown as Prisma.InputJsonValue,

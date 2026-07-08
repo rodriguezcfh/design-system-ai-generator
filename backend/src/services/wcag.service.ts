@@ -57,3 +57,25 @@ export function validatePalette(colors: Record<string, string>): WcagReport {
 
   return { allPass: checks.length > 0 && checks.every((c) => c.passes), checks }
 }
+
+// LLM-generated palettes frequently fail AA for semantic tokens (e.g. white text on a
+// "success" green) despite being told to ensure contrast — models are unreliable at exact
+// contrast math. Rather than trust the prompt, fix it deterministically: for any failing
+// pair, swap the foreground for whichever of pure black/white contrasts better against the
+// background. This always resolves — a background can never fail AA against both black and
+// white foregrounds simultaneously.
+export function enforcePaletteCompliance(colors: Record<string, string>): Record<string, string> {
+  const fixed = { ...colors }
+
+  for (const [fgKey, bgKey] of COLOR_PAIRS) {
+    const fg = fixed[fgKey]
+    const bg = fixed[bgKey]
+    if (!fg || !bg || contrastRatio(fg, bg) >= 4.5) continue
+
+    const blackRatio = contrastRatio('#000000', bg)
+    const whiteRatio = contrastRatio('#ffffff', bg)
+    fixed[fgKey] = blackRatio >= whiteRatio ? '#000000' : '#ffffff'
+  }
+
+  return fixed
+}

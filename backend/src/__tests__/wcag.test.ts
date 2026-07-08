@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { relativeLuminance, contrastRatio, isWcagAA, validatePalette } from '../services/wcag.service'
+import { relativeLuminance, contrastRatio, isWcagAA, validatePalette, enforcePaletteCompliance } from '../services/wcag.service'
 
 describe('relativeLuminance', () => {
   it('returns 1 for white', () => {
@@ -97,5 +97,40 @@ describe('validatePalette', () => {
     const partial = { background: '#ffffff', foreground: '#111928' }
     const report = validatePalette(partial)
     expect(report.checks.length).toBe(1) // only foreground/background pair
+  })
+})
+
+describe('enforcePaletteCompliance', () => {
+  it('fixes the real-world Gemini failure — white text on Bootstrap green (#28A745)', () => {
+    const colors = { success: '#28A745', successForeground: '#FFFFFF' }
+    const fixed = enforcePaletteCompliance(colors)
+    expect(fixed.successForeground).toBe('#000000')
+    expect(contrastRatio(fixed.successForeground, fixed.success)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('leaves an already-passing pair untouched', () => {
+    const colors = { primary: '#1a56db', primaryForeground: '#ffffff' }
+    const fixed = enforcePaletteCompliance(colors)
+    expect(fixed).toEqual(colors)
+  })
+
+  it('never leaves a checkable pair failing after the fix', () => {
+    const colors = {
+      primary: '#1a56db', primaryForeground: '#ffffff',
+      secondary: '#7e3af2', secondaryForeground: '#ffffff',
+      background: '#ffffff', foreground: '#111928',
+      muted: '#f3f4f6', mutedForeground: '#6b7280',
+      error: '#c81e1e', errorForeground: '#ffffff',
+      success: '#28A745', successForeground: '#FFFFFF',
+      warning: '#FFC107', warningForeground: '#FFFFFF',
+    }
+    const fixed = enforcePaletteCompliance(colors)
+    expect(validatePalette(fixed).allPass).toBe(true)
+  })
+
+  it('does not mutate the input object', () => {
+    const colors = { success: '#28A745', successForeground: '#FFFFFF' }
+    enforcePaletteCompliance(colors)
+    expect(colors.successForeground).toBe('#FFFFFF')
   })
 })

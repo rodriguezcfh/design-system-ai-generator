@@ -126,12 +126,13 @@ describe('POST /api/design-systems/:id/generate', () => {
     })
   })
 
-  it('returns 200 with wcagReport.allPass false when colors fail contrast', async () => {
+  it('auto-corrects a Gemini palette that fails contrast instead of returning allPass false', async () => {
     const badColors = {
       ...goodColors,
       primary: '#aaaaaa',
-      primaryForeground: '#bbbbbb', // near-identical — fails AA
+      primaryForeground: '#bbbbbb', // near-identical — fails AA; should get auto-fixed to black
     }
+    const fixedColors = { ...badColors, primaryForeground: '#000000' }
     vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
     vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(fakeBrief)
     vi.mocked(geminiService.generateDesignSystem).mockResolvedValue({
@@ -139,7 +140,7 @@ describe('POST /api/design-systems/:id/generate', () => {
       colors: badColors,
     })
     vi.mocked(prisma.designTokens.upsert).mockResolvedValue({
-      ...fakeTokensRecord, colors: badColors, wcagValid: false,
+      ...fakeTokensRecord, colors: fixedColors, wcagValid: true,
     })
     vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'GENERATED' })
 
@@ -148,11 +149,13 @@ describe('POST /api/design-systems/:id/generate', () => {
       .set(auth)
 
     expect(res.status).toBe(200)
-    expect(res.body.wcagReport.allPass).toBe(false)
-    const failedCheck = res.body.wcagReport.checks.find(
+    expect(res.body.wcagReport.allPass).toBe(true)
+    const primaryCheck = res.body.wcagReport.checks.find(
       (c: { label: string }) => c.label === 'Primary button text',
     )
-    expect(failedCheck.passes).toBe(false)
+    expect(primaryCheck.passes).toBe(true)
+    const upsertArg = vi.mocked(prisma.designTokens.upsert).mock.calls[0][0]
+    expect(upsertArg.create.colors).toMatchObject({ primaryForeground: '#000000' })
   })
 
   it('returns 422 if no brand brief exists', async () => {
