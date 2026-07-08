@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
-import { api, setToken, clearToken, getToken, type User } from '../api/client'
+import { api, setToken, clearToken, getToken, markNewSignup, type User } from '../api/client'
 
 type AuthState = { token: string; user: User } | null
 
@@ -38,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { token, user } = await api.auth.signup(email, password)
     setToken(token)
     setAuth({ token, user })
+    markNewSignup()
   }, [])
 
   const logout = useCallback(() => {

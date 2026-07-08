@@ -6,6 +6,7 @@ vi.mock('../api/client', () => ({
   getToken: vi.fn(() => null),
   setToken: vi.fn(),
   clearToken: vi.fn(),
+  markNewSignup: vi.fn(),
   api: {
     auth: {
       login: vi.fn(),
@@ -14,7 +15,7 @@ vi.mock('../api/client', () => ({
   },
 }))
 
-import { api, setToken, clearToken } from '../api/client'
+import { api, setToken, clearToken, markNewSignup } from '../api/client'
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <AuthProvider>{children}</AuthProvider>
@@ -58,6 +59,7 @@ describe('AuthContext', () => {
 
     expect(api.auth.signup).toHaveBeenCalledWith('new@test.com', 'password123')
     expect(setToken).toHaveBeenCalledWith(fakeToken)
+    expect(markNewSignup).toHaveBeenCalled()
     expect(result.current.isAuthenticated).toBe(true)
   })
 
