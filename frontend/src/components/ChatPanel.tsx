@@ -66,6 +66,13 @@ export function ChatPanel({ messages, isLoading, onSend, onAttach }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
 
+  useEffect(() => {
+    const el = textRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [input])
+
   function submit() {
     const value = input.trim()
     if (!value || isLoading) return
@@ -147,7 +154,7 @@ export function ChatPanel({ messages, isLoading, onSend, onAttach }: Props) {
             onKeyDown={handleKey}
             rows={1}
             placeholder="Escribí sobre tu marca…"
-            className="flex-1 resize-none bg-transparent text-sm font-sans text-ink placeholder:text-ink-faint outline-none max-h-32 py-0.5"
+            className="flex-1 resize-none overflow-y-auto bg-transparent text-sm font-sans text-ink placeholder:text-ink-faint outline-none max-h-32 py-0.5"
             style={{ lineHeight: '1.5' }}
           />
           <button

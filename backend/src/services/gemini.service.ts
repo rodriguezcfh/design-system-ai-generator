@@ -25,7 +25,11 @@ Respondé siempre con JSON válido en este formato exacto (sin markdown, sin tex
 }
 
 Marcá isComplete en true solo cuando tengas suficiente información (tono + dirección de color + al menos un valor).
-Si necesitás más info, hacé UNA sola pregunta de seguimiento enfocada en assistantMessage.`
+Si necesitás más info, hacé UNA sola pregunta de seguimiento enfocada en assistantMessage.
+
+Cuando marques isComplete en true, terminá tu assistantMessage avisándole al usuario que ya tenés
+todo lo necesario y que puede hacer clic en el botón "Generar" (arriba a la derecha del chat) para
+ver su design system — no sigas haciendo preguntas de seguimiento en ese mensaje.`
 
 export type BriefExtraction = {
   assistantMessage: string
