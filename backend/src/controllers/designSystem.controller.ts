@@ -47,6 +47,20 @@ export async function getById(req: Request, res: Response): Promise<void> {
   }
 }
 
+export async function remove(req: Request, res: Response): Promise<void> {
+  try {
+    await dsService.deleteDesignSystem(res.locals.userId as string, req.params.id)
+    res.status(204).send()
+  } catch (err) {
+    if (err instanceof dsService.NotFoundError) {
+      res.status(404).json({ error: err.message })
+      return
+    }
+    console.error('Error deleting design system:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 const exportSchema = z.object({
   repoName: z.string().min(1).optional(),
   visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
@@ -111,7 +125,31 @@ export async function generate(req: Request, res: Response): Promise<void> {
       res.status(422).json({ error: err.message })
       return
     }
+    if (err instanceof generationService.InvalidComponentCodeError) {
+      console.error('Gemini generated invalid component code:', err.message)
+      res.status(422).json({ error: err.message })
+      return
+    }
     console.error('Error generating design system:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+export async function getFigmaTokens(req: Request, res: Response): Promise<void> {
+  try {
+    const json = await dsService.getFigmaTokensExport(res.locals.userId as string, req.params.id)
+    res.setHeader('Content-Disposition', 'attachment; filename="design-tokens.json"')
+    res.status(200).type('application/json').send(json)
+  } catch (err) {
+    if (err instanceof dsService.NotFoundError) {
+      res.status(404).json({ error: err.message })
+      return
+    }
+    if (err instanceof dsService.TokensNotReadyError) {
+      res.status(422).json({ error: err.message })
+      return
+    }
+    console.error('Error building Figma tokens export:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }

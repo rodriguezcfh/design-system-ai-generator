@@ -1,4 +1,9 @@
 import prisma from '../lib/prisma'
+import { buildFigmaTokensJson } from '../lib/designTokensExport'
+import { NotFoundError, TokensNotReadyError } from '../lib/errors'
+import type { TypographyStyle } from './gemini.service'
+
+export { NotFoundError, TokensNotReadyError }
 
 export async function createDesignSystem(userId: string, name: string) {
   return prisma.designSystem.create({
@@ -37,4 +42,23 @@ export async function getDesignSystem(userId: string, id: string) {
     designSystem: ds,
     conversation: conversation ? { ...conversation, brief } : null,
   }
+}
+
+export async function deleteDesignSystem(userId: string, id: string): Promise<void> {
+  const result = await prisma.designSystem.deleteMany({ where: { id, userId } })
+  if (result.count === 0) throw new NotFoundError('Design system not found')
+}
+
+export async function getFigmaTokensExport(userId: string, id: string): Promise<string> {
+  const ds = await prisma.designSystem.findFirst({ where: { id, userId } })
+  if (!ds) throw new NotFoundError('Design system not found')
+
+  const tokens = await prisma.designTokens.findUnique({ where: { designSystemId: id } })
+  if (!tokens) throw new TokensNotReadyError()
+
+  return buildFigmaTokensJson(
+    tokens.colors as Record<string, string>,
+    tokens.typography as { fontFamily?: string; fontFamilyDisplay?: string; lineHeights?: Record<string, string> },
+    tokens.typographyScale as TypographyStyle[] | null,
+  )
 }

@@ -47,6 +47,17 @@ export function buildPostcssConfig(): string {
 `
 }
 
+export function buildVercelConfig(): string {
+  return JSON.stringify(
+    {
+      buildCommand: 'npm run build-storybook',
+      outputDirectory: 'storybook-static',
+    },
+    null,
+    2,
+  ) + '\n'
+}
+
 export function buildPackageJson(repoName: string): string {
   return JSON.stringify(
     {

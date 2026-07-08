@@ -1,6 +1,5 @@
 import prisma from '../lib/prisma'
 import * as githubService from './github.service'
-import * as vercelService from './vercel.service'
 import {
   NotFoundError,
   TokensNotReadyError,
@@ -46,28 +45,9 @@ export async function exportDesignSystem(
       githubAuth.token, fullName, colors, typography, componentCode, repoName,
     )
 
-    let deploymentUrl: string | null = null
-    let vercelProjectId: string | null = null
-    try {
-      const projectName = vercelService.sanitizeProjectName(repoName)
-      const [owner, repo] = fullName.split('/')
-      const { projectId, productionBranch } = await vercelService.createProject(fullName, projectName)
-      await vercelService.triggerProductionDeploy(projectName, owner, repo, productionBranch)
-      deploymentUrl = `https://${projectName}.vercel.app`
-      vercelProjectId = projectId
-    } catch (err) {
-      console.error('Error creating Vercel deployment:', err)
-    }
-
     const [repo, exportRecord] = await Promise.all([
       prisma.repository.create({
-        data: {
-          designSystemId,
-          repoFullName: fullName,
-          visibility: opts.visibility ?? 'PRIVATE',
-          deploymentUrl,
-          vercelProjectId,
-        },
+        data: { designSystemId, repoFullName: fullName, visibility: opts.visibility ?? 'PRIVATE' },
       }),
       prisma.export.create({ data: { designSystemId, type: 'INITIAL' } }),
     ])
@@ -78,7 +58,6 @@ export async function exportDesignSystem(
       type: 'initial' as const,
       repoFullName: repo.repoFullName,
       repoUrl: `https://github.com/${repo.repoFullName}`,
-      deploymentUrl: repo.deploymentUrl,
       exportId: exportRecord.id,
     }
   }

@@ -10,9 +10,11 @@ vi.mock('../lib/prisma', () => ({
       create: vi.fn(),
       findMany: vi.fn(),
       findFirst: vi.fn(),
+      deleteMany: vi.fn(),
     },
     conversation: { findUnique: vi.fn() },
     brandBrief: { findUnique: vi.fn() },
+    designTokens: { findUnique: vi.fn() },
   },
 }))
 
@@ -151,11 +153,10 @@ describe('GET /api/design-systems/:id', () => {
     )
   })
 
-  it('includes the previously deployed Storybook URL so it survives a reload', async () => {
+  it('includes the exported repo full name so the frontend can build a Vercel deploy link and survive a reload', async () => {
     const fakeRepository = {
       id: 'repo-1', designSystemId: 'ds-1', repoFullName: 'octocat/mi-brand-design-system',
-      visibility: 'PRIVATE', deploymentUrl: 'https://mi-brand-design-system.vercel.app',
-      vercelProjectId: 'prj_abc123', createdAt: new Date(),
+      visibility: 'PRIVATE', createdAt: new Date(),
     }
     vi.mocked(prisma.designSystem.findFirst).mockResolvedValue({ ...fakeDS, status: 'EXPORTED', repository: fakeRepository })
     vi.mocked(prisma.conversation.findUnique).mockResolvedValue(null)
@@ -167,10 +168,91 @@ describe('GET /api/design-systems/:id', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.designSystem.repository).toMatchObject({
-      deploymentUrl: 'https://mi-brand-design-system.vercel.app',
+      repoFullName: 'octocat/mi-brand-design-system',
     })
     expect(prisma.designSystem.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ select: expect.objectContaining({ repository: true }) }),
     )
+  })
+})
+
+describe('GET /api/design-systems/:id/tokens/figma', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('returns a downloadable DTCG JSON with the design tokens', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.designTokens.findUnique).mockResolvedValue({
+      id: 'tok-1', designSystemId: 'ds-1',
+      colors: { primary: '#0077B6' },
+      typography: { fontFamily: 'Inter, sans-serif' },
+      typographyScale: [],
+      componentCode: '<Button />', wcagValid: true, wcagReport: {},
+      colorScales: null, createdAt: new Date(), updatedAt: new Date(),
+    })
+
+    const res = await request(app)
+      .get('/api/design-systems/ds-1/tokens/figma')
+      .set(auth)
+
+    expect(res.status).toBe(200)
+    expect(res.headers['content-disposition']).toContain('design-tokens.json')
+    const json = JSON.parse(res.text)
+    expect(json.color.primary).toEqual({ $type: 'color', $value: '#0077B6' })
+  })
+
+  it('returns 422 if tokens are not generated yet', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(null)
+
+    const res = await request(app)
+      .get('/api/design-systems/ds-1/tokens/figma')
+      .set(auth)
+
+    expect(res.status).toBe(422)
+  })
+
+  it('returns 404 if the design system does not belong to the user', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(null)
+
+    const res = await request(app)
+      .get('/api/design-systems/ds-1/tokens/figma')
+      .set(auth)
+
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 401 with no token', async () => {
+    const res = await request(app).get('/api/design-systems/ds-1/tokens/figma')
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('DELETE /api/design-systems/:id', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('deletes the design system and returns 204', async () => {
+    vi.mocked(prisma.designSystem.deleteMany).mockResolvedValue({ count: 1 })
+
+    const res = await request(app)
+      .delete('/api/design-systems/ds-1')
+      .set(auth)
+
+    expect(res.status).toBe(204)
+    expect(prisma.designSystem.deleteMany).toHaveBeenCalledWith({ where: { id: 'ds-1', userId: 'user-1' } })
+  })
+
+  it('returns 404 if not found or not owned', async () => {
+    vi.mocked(prisma.designSystem.deleteMany).mockResolvedValue({ count: 0 })
+
+    const res = await request(app)
+      .delete('/api/design-systems/ds-other')
+      .set(auth)
+
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 401 with no token', async () => {
+    const res = await request(app).delete('/api/design-systems/ds-1')
+    expect(res.status).toBe(401)
   })
 })

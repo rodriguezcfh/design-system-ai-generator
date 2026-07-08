@@ -111,6 +111,7 @@ export async function scaffoldRepository(
     { path: 'src/tokens/typography.json', content: scaffold.buildTypographyJson(typography) },
     { path: 'tailwind.config.js', content: scaffold.buildTailwindConfig(colors) },
     { path: 'postcss.config.js', content: scaffold.buildPostcssConfig() },
+    { path: 'vercel.json', content: scaffold.buildVercelConfig() },
     { path: 'src/components/Button.jsx', content: componentCode },
     { path: 'src/components/Button.stories.jsx', content: scaffold.buildButtonStories() },
   ]

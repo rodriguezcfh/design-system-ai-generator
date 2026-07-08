@@ -37,7 +37,7 @@ export default function DesignSystemPage() {
   const [isChatLoading, setIsChatLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGithubConnected, setIsGithubConnected] = useState(false)
-  const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null)
+  const [repoFullName, setRepoFullName] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('preview')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -66,7 +66,7 @@ export default function DesignSystemPage() {
         }
         setExports(exportsData)
         setIsGithubConnected(githubStatus.connected)
-        setDeploymentUrl(dsData.designSystem.repository?.deploymentUrl ?? null)
+        setRepoFullName(dsData.designSystem.repository?.repoFullName ?? null)
       })
       .catch(() => navigate('/'))
       .finally(() => setIsLoading(false))
@@ -122,13 +122,26 @@ export default function DesignSystemPage() {
     if (!id) return
     const result = await api.designSystems.export(id, repoName, visibility)
     setDsStatus('EXPORTED')
-    if (result.deploymentUrl) setDeploymentUrl(result.deploymentUrl)
+    if (result.repoFullName) setRepoFullName(result.repoFullName)
     // Refresh exports
     const exportsData = await api.designSystems.exports(id)
     setExports(exportsData)
     setActiveTab('export')
     setIsGithubConnected(true)
     return result
+  }
+
+  async function handleDownloadFigmaTokens() {
+    if (!id) return
+    const blob = await api.designSystems.figmaTokens(id)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'design-tokens.json'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   }
 
   function handleConnectGitHub() {
@@ -232,7 +245,8 @@ export default function DesignSystemPage() {
                   onConnectGitHub={handleConnectGitHub}
                   isGithubConnected={isGithubConnected}
                   canExport={dsStatus !== 'DRAFT'}
-                  deploymentUrl={deploymentUrl}
+                  repoFullName={repoFullName}
+                  onDownloadFigmaTokens={handleDownloadFigmaTokens}
                 />
               )}
             </div>

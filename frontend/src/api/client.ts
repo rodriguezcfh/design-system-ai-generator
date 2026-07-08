@@ -1,8 +1,16 @@
 const TOKEN_KEY = 'dsai_token'
+const ONBOARDING_FLAG_KEY = 'dsai_show_onboarding'
 
 export function getToken() { return localStorage.getItem(TOKEN_KEY) }
 export function setToken(t: string) { localStorage.setItem(TOKEN_KEY, t) }
 export function clearToken() { localStorage.removeItem(TOKEN_KEY) }
+
+export function markNewSignup() { localStorage.setItem(ONBOARDING_FLAG_KEY, 'true') }
+export function consumeOnboardingFlag(): boolean {
+  const shouldShow = localStorage.getItem(ONBOARDING_FLAG_KEY) === 'true'
+  if (shouldShow) localStorage.removeItem(ONBOARDING_FLAG_KEY)
+  return shouldShow
+}
 
 export class ApiError extends Error {
   constructor(
@@ -96,7 +104,7 @@ export type Export = {
   createdAt: string
 }
 
-export type Repository = { repoFullName: string; deploymentUrl: string | null }
+export type Repository = { repoFullName: string }
 
 export type DSDetail = {
   designSystem: DesignSystem & { tokens?: DesignTokens | null; repository?: Repository | null }
@@ -125,6 +133,7 @@ export const api = {
         method: 'POST', body: JSON.stringify({ name }),
       }),
     get: (id: string) => apiFetch<DSDetail>(`/design-systems/${id}`),
+    delete: (id: string) => apiFetch<void>(`/design-systems/${id}`, { method: 'DELETE' }),
     generate: (id: string) =>
       apiFetch<{ tokens: DesignTokens; wcagReport: WcagReport }>(`/design-systems/${id}/generate`, {
         method: 'POST',
@@ -132,7 +141,7 @@ export const api = {
     export: (id: string, repoName?: string, visibility?: 'public' | 'private') =>
       apiFetch<{
         type: 'initial' | 'update'
-        repoUrl?: string; repoFullName?: string; deploymentUrl?: string | null
+        repoUrl?: string; repoFullName?: string
         prUrl?: string; prNumber?: number; branchName?: string
         exportId: string
       }>(`/design-systems/${id}/export`, {
@@ -142,6 +151,17 @@ export const api = {
         }),
       }),
     exports: (id: string) => apiFetch<Export[]>(`/design-systems/${id}/exports`),
+    figmaTokens: async (id: string): Promise<Blob> => {
+      const token = getToken()
+      const res = await fetch(`/api/design-systems/${id}/tokens/figma`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Download failed' }))
+        throw new ApiError(data.error ?? 'Download failed', res.status, data)
+      }
+      return res.blob()
+    },
   },
 
   chat: {
