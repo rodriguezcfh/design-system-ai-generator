@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
-import { api, setToken, clearToken, getToken, markNewSignup, type User } from '../api/client'
+import {
+  api, setToken, clearToken, getToken, markNewSignup,
+  getStoredUser, setStoredUser, clearStoredUser, type User,
+} from '../api/client'
 
 type AuthState = { token: string; user: User } | null
 
@@ -16,6 +19,8 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 function loadInitialAuth(): AuthState {
   const token = getToken()
   if (!token) return null
+  const storedUser = getStoredUser()
+  if (storedUser) return { token, user: storedUser }
   try {
     const payload = JSON.parse(atob(token.split('.')[1]))
     return { token, user: { id: payload.userId, email: '', createdAt: '' } }
@@ -31,18 +36,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const { token, user } = await api.auth.login(email, password)
     setToken(token)
+    setStoredUser(user)
     setAuth({ token, user })
   }, [])
 
   const signup = useCallback(async (email: string, password: string) => {
     const { token, user } = await api.auth.signup(email, password)
     setToken(token)
+    setStoredUser(user)
     setAuth({ token, user })
     markNewSignup()
   }, [])
 
   const logout = useCallback(() => {
     clearToken()
+    clearStoredUser()
     setAuth(null)
   }, [])
 

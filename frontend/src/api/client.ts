@@ -1,9 +1,22 @@
 const TOKEN_KEY = 'dsai_token'
+const USER_KEY = 'dsai_user'
 const ONBOARDING_FLAG_KEY = 'dsai_show_onboarding'
 
 export function getToken() { return localStorage.getItem(TOKEN_KEY) }
 export function setToken(t: string) { localStorage.setItem(TOKEN_KEY, t) }
 export function clearToken() { localStorage.removeItem(TOKEN_KEY) }
+
+export function getStoredUser(): User | null {
+  const raw = localStorage.getItem(USER_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as User
+  } catch {
+    return null
+  }
+}
+export function setStoredUser(user: User) { localStorage.setItem(USER_KEY, JSON.stringify(user)) }
+export function clearStoredUser() { localStorage.removeItem(USER_KEY) }
 
 export function markNewSignup() { localStorage.setItem(ONBOARDING_FLAG_KEY, 'true') }
 export function consumeOnboardingFlag(): boolean {

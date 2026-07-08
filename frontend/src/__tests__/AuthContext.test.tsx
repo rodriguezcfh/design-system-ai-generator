@@ -6,6 +6,9 @@ vi.mock('../api/client', () => ({
   getToken: vi.fn(() => null),
   setToken: vi.fn(),
   clearToken: vi.fn(),
+  getStoredUser: vi.fn(() => null),
+  setStoredUser: vi.fn(),
+  clearStoredUser: vi.fn(),
   markNewSignup: vi.fn(),
   api: {
     auth: {
@@ -15,7 +18,7 @@ vi.mock('../api/client', () => ({
   },
 }))
 
-import { api, setToken, clearToken, markNewSignup } from '../api/client'
+import { api, setToken, clearToken, getToken, getStoredUser, setStoredUser, clearStoredUser, markNewSignup } from '../api/client'
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <AuthProvider>{children}</AuthProvider>
@@ -35,6 +38,17 @@ describe('AuthContext', () => {
     expect(result.current.auth).toBeNull()
   })
 
+  it('rehydrates the stored user (with email) on reload instead of a blank email from the JWT', () => {
+    vi.mocked(getToken).mockReturnValueOnce(fakeToken)
+    vi.mocked(getStoredUser).mockReturnValueOnce(fakeUser)
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    expect(result.current.isAuthenticated).toBe(true)
+    expect(result.current.auth?.user).toEqual(fakeUser)
+    expect(result.current.auth?.user.email).toBe('test@test.com')
+  })
+
   it('login sets auth state and token', async () => {
     vi.mocked(api.auth.login).mockResolvedValue({ token: fakeToken, user: fakeUser })
     const { result } = renderHook(() => useAuth(), { wrapper })
@@ -45,6 +59,7 @@ describe('AuthContext', () => {
 
     expect(api.auth.login).toHaveBeenCalledWith('test@test.com', 'password')
     expect(setToken).toHaveBeenCalledWith(fakeToken)
+    expect(setStoredUser).toHaveBeenCalledWith(fakeUser)
     expect(result.current.isAuthenticated).toBe(true)
     expect(result.current.auth?.user).toEqual(fakeUser)
   })
@@ -75,6 +90,7 @@ describe('AuthContext', () => {
     act(() => { result.current.logout() })
 
     expect(clearToken).toHaveBeenCalled()
+    expect(clearStoredUser).toHaveBeenCalled()
     expect(result.current.isAuthenticated).toBe(false)
     expect(result.current.auth).toBeNull()
   })
