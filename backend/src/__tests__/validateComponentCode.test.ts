@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { detectTypeScriptSyntax, assertNoTypeScriptSyntax } from '../lib/validateComponentCode'
-import { InvalidComponentCodeError } from '../lib/errors'
+import {
+  detectTypeScriptSyntax, assertNoTypeScriptSyntax,
+  detectDisallowedImports, assertNoDisallowedImports,
+} from '../lib/validateComponentCode'
+import { InvalidComponentCodeError, DisallowedImportError } from '../lib/errors'
 
 const validJsx = `
 const cn = (...classes) => classes.filter(Boolean).join(' ')
@@ -62,5 +65,47 @@ describe('assertNoTypeScriptSyntax', () => {
     const code = `interface Props {}`
     expect(() => assertNoTypeScriptSyntax(code)).toThrow(InvalidComponentCodeError)
     expect(() => assertNoTypeScriptSyntax(code)).toThrow(/interface/)
+  })
+})
+
+describe('detectDisallowedImports', () => {
+  it('returns an empty array for a component that only imports react', () => {
+    expect(detectDisallowedImports(validJsx)).toEqual([])
+  })
+
+  it('flags the real-world failure: a Button importing class-variance-authority, tailwind-merge, and prop-types', () => {
+    const code = `
+import * as React from 'react';
+import { cva } from 'class-variance-authority';
+import { twMerge } from 'tailwind-merge';
+import PropTypes from 'prop-types';
+`
+    const found = detectDisallowedImports(code)
+    expect(found).toContain('class-variance-authority')
+    expect(found).toContain('tailwind-merge')
+    expect(found).toContain('prop-types')
+    expect(found).not.toContain('react')
+  })
+
+  it('allows relative imports (the component importing its own siblings)', () => {
+    const code = `import { cn } from './utils'\nimport Icon from '../icons/Icon.jsx'`
+    expect(detectDisallowedImports(code)).toEqual([])
+  })
+
+  it('flags a disallowed package pulled in via require() too', () => {
+    const code = `const { cva } = require('class-variance-authority')`
+    expect(detectDisallowedImports(code)).toEqual(['class-variance-authority'])
+  })
+})
+
+describe('assertNoDisallowedImports', () => {
+  it('does not throw when only react is imported', () => {
+    expect(() => assertNoDisallowedImports(validJsx)).not.toThrow()
+  })
+
+  it('throws DisallowedImportError naming the offending package', () => {
+    const code = `import { cva } from 'class-variance-authority'`
+    expect(() => assertNoDisallowedImports(code)).toThrow(DisallowedImportError)
+    expect(() => assertNoDisallowedImports(code)).toThrow(/class-variance-authority/)
   })
 })

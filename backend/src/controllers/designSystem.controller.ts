@@ -125,7 +125,7 @@ export async function generate(req: Request, res: Response): Promise<void> {
       res.status(422).json({ error: err.message })
       return
     }
-    if (err instanceof generationService.InvalidComponentCodeError) {
+    if (err instanceof generationService.InvalidComponentCodeError || err instanceof generationService.DisallowedImportError) {
       console.error('Gemini generated invalid component code:', err.message)
       res.status(422).json({ error: err.message })
       return

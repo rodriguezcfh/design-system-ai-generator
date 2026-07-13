@@ -178,6 +178,27 @@ describe('POST /api/design-systems/:id/generate', () => {
     expect(prisma.designTokens.upsert).not.toHaveBeenCalled()
   })
 
+  it('returns 422 if Gemini generates a button that imports a package not in the exported package.json', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(fakeBrief)
+    vi.mocked(geminiService.generateDesignSystem).mockResolvedValue({
+      ...fakeGeneratedDS,
+      buttonComponent: `
+        import { cva } from 'class-variance-authority';
+        import { twMerge } from 'tailwind-merge';
+        const Button = (props) => <button {...props} />
+      `,
+    })
+
+    const res = await request(app)
+      .post('/api/design-systems/ds-1/generate')
+      .set(auth)
+
+    expect(res.status).toBe(422)
+    expect(res.body.error).toMatch(/class-variance-authority/)
+    expect(prisma.designTokens.upsert).not.toHaveBeenCalled()
+  })
+
   it('returns 422 if no brand brief exists', async () => {
     vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
     vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(null)

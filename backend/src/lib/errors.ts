@@ -47,6 +47,15 @@ export class InvalidComponentCodeError extends Error {
   }
 }
 
+export class DisallowedImportError extends Error {
+  constructor(packages: string[]) {
+    super(
+      `Generated component imports packages that aren't installed in the exported repo, which breaks the Storybook build: ${packages.join(', ')}`,
+    )
+    this.name = 'DisallowedImportError'
+  }
+}
+
 export class GithubNotConnectedError extends Error {
   constructor() {
     super('GitHub account not connected')

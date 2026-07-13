@@ -134,7 +134,15 @@ parsed by Storybook/Babel's JSX-only parser, which cannot handle TypeScript synt
   "): JSX.Element", no "React.FC<...>").
 - NO "as" type assertions (no "as const", "as unknown", "as SomeType").
 - NO enums.
-If you want to document props, use JSDoc comments or a propTypes object — never TypeScript.
+If you want to document props, use JSDoc comments — never TypeScript.
+
+CRITICAL: buttonComponent must not import ANY npm package other than "react" — no
+class-variance-authority, tailwind-merge, clsx, prop-types, @radix-ui/*, or anything else. The
+exported repo's package.json only declares react/react-dom as dependencies, so any other import
+is unresolvable and fails the ENTIRE Storybook build, not just the Button. Implement className
+merging with a small inline helper function (e.g. a local cn(...classes) that filters and joins
+strings) and variant/size lookup with plain object literals — do not reach for a runtime prop
+validation library either, a plain JSDoc comment is enough.
 
 typographyScale must be ordered from largest to smallest and cover at least Display, Heading 1-4,
 and Body.`
