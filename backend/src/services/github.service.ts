@@ -96,6 +96,8 @@ export async function scaffoldRepository(
   fullName: string,
   colors: Record<string, string>,
   typography: Record<string, unknown>,
+  colorScales: Record<string, unknown> | null,
+  typographyScale: unknown[] | null,
   componentCode: string,
   repoName: string,
 ): Promise<void> {
@@ -109,11 +111,14 @@ export async function scaffoldRepository(
     { path: 'src/index.css', content: scaffold.buildIndexCss() },
     { path: 'src/tokens/colors.json', content: scaffold.buildColorsJson(colors) },
     { path: 'src/tokens/typography.json', content: scaffold.buildTypographyJson(typography) },
+    { path: 'src/tokens/colorScales.json', content: scaffold.buildColorScalesJson(colorScales) },
+    { path: 'src/tokens/typographyScale.json', content: scaffold.buildTypographyScaleJson(typographyScale) },
     { path: 'tailwind.config.js', content: scaffold.buildTailwindConfig(colors) },
     { path: 'postcss.config.js', content: scaffold.buildPostcssConfig() },
     { path: 'vercel.json', content: scaffold.buildVercelConfig() },
     { path: 'src/components/Button.jsx', content: componentCode },
     { path: 'src/components/Button.stories.jsx', content: scaffold.buildButtonStories() },
+    { path: 'src/foundations/Foundations.stories.jsx', content: scaffold.buildFoundationsStory() },
   ]
 
   for (const file of files) {
@@ -132,6 +137,8 @@ export async function createUpdatePR(
   fullName: string,
   colors: Record<string, string>,
   typography: Record<string, unknown>,
+  colorScales: Record<string, unknown> | null,
+  typographyScale: unknown[] | null,
   componentCode: string,
   dsName: string,
 ): Promise<{
@@ -153,8 +160,11 @@ export async function createUpdatePR(
   const filesToUpdate = [
     { path: 'src/tokens/colors.json', content: scaffold.buildColorsJson(colors) },
     { path: 'src/tokens/typography.json', content: scaffold.buildTypographyJson(typography) },
+    { path: 'src/tokens/colorScales.json', content: scaffold.buildColorScalesJson(colorScales) },
+    { path: 'src/tokens/typographyScale.json', content: scaffold.buildTypographyScaleJson(typographyScale) },
     { path: 'tailwind.config.js', content: scaffold.buildTailwindConfig(colors) },
     { path: 'src/components/Button.jsx', content: componentCode },
+    { path: 'src/foundations/Foundations.stories.jsx', content: scaffold.buildFoundationsStory() },
   ]
 
   for (const file of filesToUpdate) {

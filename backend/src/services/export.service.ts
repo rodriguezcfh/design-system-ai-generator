@@ -33,6 +33,8 @@ export async function exportDesignSystem(
   const existingRepo = await prisma.repository.findUnique({ where: { designSystemId } })
   const colors = tokens.colors as Record<string, string>
   const typography = tokens.typography as Record<string, unknown>
+  const colorScales = tokens.colorScales as Record<string, unknown> | null
+  const typographyScale = tokens.typographyScale as unknown[] | null
   const componentCode = tokens.componentCode ?? ''
 
   if (!existingRepo) {
@@ -42,7 +44,7 @@ export async function exportDesignSystem(
     const { fullName } = await githubService.createRepository(githubAuth.token, repoName, isPrivate)
 
     await githubService.scaffoldRepository(
-      githubAuth.token, fullName, colors, typography, componentCode, repoName,
+      githubAuth.token, fullName, colors, typography, colorScales, typographyScale, componentCode, repoName,
     )
 
     const [repo, exportRecord] = await Promise.all([
@@ -63,7 +65,7 @@ export async function exportDesignSystem(
   }
 
   const { prNumber, prUrl, branchName, prTitle, prBody } = await githubService.createUpdatePR(
-    githubAuth.token, existingRepo.repoFullName, colors, typography, componentCode, ds.name,
+    githubAuth.token, existingRepo.repoFullName, colors, typography, colorScales, typographyScale, componentCode, ds.name,
   )
 
   const exportRecord = await prisma.export.create({
