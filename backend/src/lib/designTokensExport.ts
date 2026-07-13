@@ -15,9 +15,13 @@ function resolveFontFamily(style: TypographyStyle, typography: TypographyInput):
   return typography.fontFamilyDisplay ?? typography.fontFamily ?? 'Inter, sans-serif'
 }
 
-// W3C Design Tokens Community Group format ($type/$value) — the current standard Figma
-// natively imports into Variables. Only colors and typography are included on purpose:
-// component code (the generated Button) doesn't map to a Figma-importable token.
+// Tokens Studio for Figma format: everything nested under a top-level token set name
+// ("global") — the plugin only recognizes $value/$type tokens when they're inside a named
+// set, a bare {color, typography} root (the plain W3C DTCG shape) reads as "no sets" and the
+// plugin shows nothing. fontWeight is a named string ("Bold", "Regular") rather than a numeric
+// weight, matching Tokens Studio's own typography composite convention. Only colors and
+// typography are included on purpose: component code (the generated Button) doesn't map to a
+// Figma-importable token.
 export function buildFigmaTokensJson(
   colors: Record<string, string>,
   typography: TypographyInput,
@@ -26,7 +30,7 @@ export function buildFigmaTokensJson(
   const colorTokens = Object.fromEntries(
     Object.entries(colors).map(([key, value]) => [
       toKebabCase(key),
-      { $type: 'color', $value: value },
+      { $value: value, $type: 'color' },
     ]),
   )
 
@@ -34,21 +38,22 @@ export function buildFigmaTokensJson(
     (typographyScale ?? []).map((style) => [
       style.name.toLowerCase().replace(/\s+/g, '-'),
       {
-        $type: 'typography',
         $value: {
           fontFamily: resolveFontFamily(style, typography),
-          fontWeight: style.weightValue,
+          fontWeight: style.weightName,
           fontSize: `${style.sizePx}px`,
-          lineHeight: typography.lineHeights?.normal ?? '1.5',
         },
+        $type: 'typography',
       },
     ]),
   )
 
   return JSON.stringify(
     {
-      color: colorTokens,
-      ...(Object.keys(typographyTokens).length ? { typography: typographyTokens } : {}),
+      global: {
+        color: colorTokens,
+        ...(Object.keys(typographyTokens).length ? { typography: typographyTokens } : {}),
+      },
     },
     null,
     2,

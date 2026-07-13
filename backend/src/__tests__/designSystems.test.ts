@@ -197,7 +197,7 @@ describe('GET /api/design-systems/:id/tokens/figma', () => {
     expect(res.status).toBe(200)
     expect(res.headers['content-disposition']).toContain('design-tokens.json')
     const json = JSON.parse(res.text)
-    expect(json.color.primary).toEqual({ $type: 'color', $value: '#0077B6' })
+    expect(json.global.color.primary).toEqual({ $value: '#0077B6', $type: 'color' })
   })
 
   it('returns 422 if tokens are not generated yet', async () => {

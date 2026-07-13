@@ -20,38 +20,48 @@ const typographyScale = [
 ]
 
 describe('buildFigmaTokensJson', () => {
-  it('outputs W3C DTCG-shaped color tokens ($type/$value) in kebab-case', () => {
+  it('nests every token set under a top-level "global" set, as Tokens Studio for Figma requires', () => {
     const json = JSON.parse(buildFigmaTokensJson(colors, typography, null))
 
-    expect(json.color.primary).toEqual({ $type: 'color', $value: '#0077B6' })
-    expect(json.color['primary-foreground']).toEqual({ $type: 'color', $value: '#FFFFFF' })
+    expect(json).toHaveProperty('global')
+    expect(json.global).toHaveProperty('color')
+    expect(json).not.toHaveProperty('color')
+  })
+
+  it('outputs $value before $type for color tokens, in kebab-case', () => {
+    const json = JSON.parse(buildFigmaTokensJson(colors, typography, null))
+
+    expect(json.global.color.primary).toEqual({ $value: '#0077B6', $type: 'color' })
+    expect(json.global.color['primary-foreground']).toEqual({ $value: '#FFFFFF', $type: 'color' })
   })
 
   it('resolves the display/heading font from fontFamilyDisplay and body from fontFamily', () => {
     const json = JSON.parse(buildFigmaTokensJson(colors, typography, typographyScale))
 
-    expect(json.typography.display.$value.fontFamily).toBe('Kiona, sans-serif')
-    expect(json.typography['heading-1'].$value.fontFamily).toBe('Kiona, sans-serif')
-    expect(json.typography.body.$value.fontFamily).toBe('Montserrat, sans-serif')
+    expect(json.global.typography.display.$value.fontFamily).toBe('Kiona, sans-serif')
+    expect(json.global.typography['heading-1'].$value.fontFamily).toBe('Kiona, sans-serif')
+    expect(json.global.typography.body.$value.fontFamily).toBe('Montserrat, sans-serif')
   })
 
-  it('encodes size in px and weight as a number', () => {
+  it('encodes size in px and weight as a named string (Tokens Studio convention), not a number', () => {
     const json = JSON.parse(buildFigmaTokensJson(colors, typography, typographyScale))
 
-    expect(json.typography.display.$value.fontSize).toBe('48px')
-    expect(json.typography.display.$value.fontWeight).toBe(700)
+    expect(json.global.typography.display.$value.fontSize).toBe('48px')
+    expect(json.global.typography.display.$value.fontWeight).toBe('Bold')
+    expect(json.global.typography.body.$value.fontWeight).toBe('Regular')
   })
 
   it('omits the typography group entirely when there is no typographyScale (legacy design systems)', () => {
     const json = JSON.parse(buildFigmaTokensJson(colors, typography, null))
 
-    expect(json).not.toHaveProperty('typography')
-    expect(json).toHaveProperty('color')
+    expect(json.global).not.toHaveProperty('typography')
+    expect(json.global).toHaveProperty('color')
   })
 
-  it('never includes component code — only color and typography groups can exist', () => {
+  it('never includes component code — only color and typography groups can exist under global', () => {
     const json = JSON.parse(buildFigmaTokensJson(colors, typography, typographyScale))
 
-    expect(Object.keys(json).sort()).toEqual(['color', 'typography'])
+    expect(Object.keys(json)).toEqual(['global'])
+    expect(Object.keys(json.global).sort()).toEqual(['color', 'typography'])
   })
 })
