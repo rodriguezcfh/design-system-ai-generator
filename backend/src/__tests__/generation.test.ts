@@ -54,6 +54,13 @@ const fakeTypographyScale = [
   { name: 'Body', description: 'Texto', sizePx: 16, sizeRem: 1, weightName: 'Regular', weightValue: 400, role: 'body' as const },
 ]
 
+const fakeAdditionalComponents = {
+  input: 'export function Input() { return <input /> }',
+  alert: 'export function Alert() { return <div /> }',
+  textarea: 'export function Textarea() { return <textarea /> }',
+  chip: 'export function Badge() { return <span /> }',
+}
+
 const fakeGeneratedDS = {
   colors: goodColors,
   typography: {
@@ -64,6 +71,7 @@ const fakeGeneratedDS = {
   },
   typographyScale: fakeTypographyScale,
   buttonComponent: 'export function Button() { return <button>Click</button> }',
+  additionalComponents: fakeAdditionalComponents,
 }
 
 const fakeTokensRecord = {
@@ -71,6 +79,7 @@ const fakeTokensRecord = {
   colors: goodColors, typography: fakeGeneratedDS.typography,
   colorScales: null, typographyScale: fakeTypographyScale,
   componentCode: fakeGeneratedDS.buttonComponent,
+  additionalComponents: fakeAdditionalComponents,
   wcagValid: true, wcagReport: {},
   createdAt: new Date(), updatedAt: new Date(),
 }
@@ -175,6 +184,40 @@ describe('POST /api/design-systems/:id/generate', () => {
 
     expect(res.status).toBe(422)
     expect(res.body.error).toMatch(/TypeScript/)
+    expect(prisma.designTokens.upsert).not.toHaveBeenCalled()
+  })
+
+  it('persists additionalComponents (Input, Alert, Textarea, Badge) alongside the Button', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(fakeBrief)
+    vi.mocked(geminiService.generateDesignSystem).mockResolvedValue(fakeGeneratedDS)
+    vi.mocked(prisma.designTokens.upsert).mockResolvedValue(fakeTokensRecord)
+    vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'GENERATED' })
+
+    await request(app).post('/api/design-systems/ds-1/generate').set(auth)
+
+    const upsertArg = vi.mocked(prisma.designTokens.upsert).mock.calls[0][0]
+    expect(upsertArg.create.additionalComponents).toEqual(fakeAdditionalComponents)
+    expect(upsertArg.update.additionalComponents).toEqual(fakeAdditionalComponents)
+  })
+
+  it('returns 422 naming Input when only that component has TypeScript syntax', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(fakeBrief)
+    vi.mocked(geminiService.generateDesignSystem).mockResolvedValue({
+      ...fakeGeneratedDS,
+      additionalComponents: {
+        ...fakeAdditionalComponents,
+        input: `interface InputProps {}\nconst Input = (props) => <input {...props} />`,
+      },
+    })
+
+    const res = await request(app)
+      .post('/api/design-systems/ds-1/generate')
+      .set(auth)
+
+    expect(res.status).toBe(422)
+    expect(res.body.error).toMatch(/^Input:/)
     expect(prisma.designTokens.upsert).not.toHaveBeenCalled()
   })
 

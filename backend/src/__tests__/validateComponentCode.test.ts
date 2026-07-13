@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   detectTypeScriptSyntax, assertNoTypeScriptSyntax,
   detectDisallowedImports, assertNoDisallowedImports,
+  assertValidComponentCode,
 } from '../lib/validateComponentCode'
 import { InvalidComponentCodeError, DisallowedImportError } from '../lib/errors'
 
@@ -107,5 +108,23 @@ describe('assertNoDisallowedImports', () => {
     const code = `import { cva } from 'class-variance-authority'`
     expect(() => assertNoDisallowedImports(code)).toThrow(DisallowedImportError)
     expect(() => assertNoDisallowedImports(code)).toThrow(/class-variance-authority/)
+  })
+})
+
+describe('assertValidComponentCode', () => {
+  it('does not throw for valid JS + JSX importing only react', () => {
+    expect(() => assertValidComponentCode('Input', validJsx)).not.toThrow()
+  })
+
+  it('prefixes the component name to a TypeScript-syntax error, so a multi-component 422 says which one failed', () => {
+    const code = `interface Props {}`
+    expect(() => assertValidComponentCode('Input', code)).toThrow(/^Input: /)
+    expect(() => assertValidComponentCode('Input', code)).toThrow(/interface/)
+  })
+
+  it('prefixes the component name to a disallowed-import error', () => {
+    const code = `import { cva } from 'class-variance-authority'`
+    expect(() => assertValidComponentCode('Alert', code)).toThrow(/^Alert: /)
+    expect(() => assertValidComponentCode('Alert', code)).toThrow(/class-variance-authority/)
   })
 })

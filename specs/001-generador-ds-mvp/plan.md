@@ -51,3 +51,46 @@ y `colors.json`/`typography.json` del repo exportado.
 `BrandBrief` gana `preferredColors Json?`, `preferredHeadingFont String?`,
 `preferredBodyFont String?` — persistidos en cada turno de chat aunque el brief todavía no esté
 completo, igual que `tone`/`values`/`references` hoy.
+
+## Componentes adicionales (Input, Alert, Textarea, Badge)
+
+### Contrato de props fijo por componente
+
+El mismo patrón que ya resolvía Button se replica 4 veces: el prompt le exige a Gemini una API de
+props específica y documentada (`Input: { placeholder, disabled, error, errorMessage,
+defaultValue }`, etc. — ver FR-009 en `spec.md`), y `scaffold.ts` escribe una story CSF estática
+(no generada por IA) que asume esa API exacta. Esto es necesario porque la story se escribe una
+sola vez en nuestro código; si el prop contract variara según lo que la IA decida cada vez, la
+story rompería. La IA controla el styling (qué clases de Tailwind, qué estructura JSX interna),
+no el contrato público del componente.
+
+### `additionalComponents` como columna separada, no reemplazo de `componentCode`
+
+`DesignTokens.componentCode` (Button) queda intacto. Se agrega `additionalComponents Json?` con
+forma `{ input, alert, textarea, chip }` en vez de migrar todo a una estructura unificada
+`components: Json` — evita tocar el código/tests existentes de Button sin necesidad real, y deja
+la puerta abierta a que Button se sume a esa estructura más adelante si hiciera falta.
+
+### Validación por componente con nombre en el error
+
+`assertValidComponentCode(name, code)` en `validateComponentCode.ts` envuelve los 2 guards
+existentes (`assertNoTypeScriptSyntax`, `assertNoDisallowedImports`) y prefija el nombre del
+componente al mensaje de error. Sin esto, un 422 por un componente roto entre 5 no diría cuál —
+`generation.service.ts` corre el guard 5 veces (Button, Input, Alert, Textarea, Badge) antes de
+persistir nada.
+
+### Por qué el preview en el frontend no ejecuta el JSX generado
+
+`PreviewPanel.tsx` nunca ejecutó el código de Button generado por la IA — `ButtonPreview` es un
+componente React propio que aproxima visualmente el resultado usando `tokens.colors`. Evaluar
+JSX arbitrario generado por un LLM en el navegador del usuario sería una superficie de
+inyección de código innecesaria para lo que se necesita (una vista previa aproximada, no una
+ejecución fiel). Los 4 preview nuevos (`InputPreview`, `AlertPreview`, `TextareaPreview`,
+`BadgePreview`) siguen el mismo patrón.
+
+### Compatibilidad con design systems generados antes de esta feature
+
+Un `DesignTokens` viejo tiene `additionalComponents: null`. `export.service.ts` resuelve esto con
+`withFallbacks()`: si es `null`, sustituye por componentes placeholder mínimos (`export function
+Input() { return null }`, etc.) en vez de romper el export — el usuario puede regenerar el design
+system para obtener los componentes reales.

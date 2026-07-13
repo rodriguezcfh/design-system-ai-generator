@@ -31,11 +31,18 @@ const fakeDS = {
   id: 'ds-1', userId: 'user-1', name: 'Mi Brand', status: 'GENERATED',
   createdAt: new Date(), updatedAt: new Date(),
 }
+const fakeAdditionalComponents = {
+  input: 'export function Input() { return <input /> }',
+  alert: 'export function Alert() { return <div /> }',
+  textarea: 'export function Textarea() { return <textarea /> }',
+  chip: 'export function Badge() { return <span /> }',
+}
 const fakeTokens = {
   id: 'tok-1', designSystemId: 'ds-1', wcagValid: true,
   colors: { primary: '#1a56db', primaryForeground: '#ffffff', background: '#ffffff', foreground: '#111928' },
   typography: { fontFamily: 'Inter, sans-serif' },
   componentCode: 'export function Button() { return <button>Click</button> }',
+  additionalComponents: fakeAdditionalComponents,
   wcagReport: {}, createdAt: new Date(), updatedAt: new Date(),
 }
 const fakeRepo = {
@@ -70,6 +77,35 @@ describe('POST /api/design-systems/:id/export', () => {
     expect(res.status).toBe(201)
     expect(res.body.type).toBe('initial')
     expect(res.body.repoUrl).toContain('github.com')
+    expect(githubService.scaffoldRepository).toHaveBeenCalledWith(
+      'ghs_abc', 'octocat/mi-brand-design-system',
+      fakeTokens.colors, fakeTokens.typography, undefined, undefined,
+      fakeTokens.componentCode, fakeAdditionalComponents, 'mi-brand-design-system',
+    )
+  })
+
+  it('falls back to placeholder components when additionalComponents is null (design system generated before this feature)', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.designTokens.findUnique).mockResolvedValue({ ...fakeTokens, additionalComponents: null })
+    vi.mocked(prisma.repository.findUnique).mockResolvedValue(null)
+    vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
+    vi.mocked(githubService.createRepository).mockResolvedValue({ fullName: 'octocat/mi-brand-design-system' })
+    vi.mocked(githubService.scaffoldRepository).mockResolvedValue(undefined)
+    vi.mocked(prisma.repository.create).mockResolvedValue(fakeRepo)
+    vi.mocked(prisma.export.create).mockResolvedValue(fakeExport)
+    vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'EXPORTED' })
+
+    const res = await request(app)
+      .post('/api/design-systems/ds-1/export')
+      .set(auth)
+      .send({})
+
+    expect(res.status).toBe(201)
+    const [, , , , , , , additionalComponentsArg] = vi.mocked(githubService.scaffoldRepository).mock.calls[0]
+    expect(additionalComponentsArg.input).toContain('Input')
+    expect(additionalComponentsArg.alert).toContain('Alert')
+    expect(additionalComponentsArg.textarea).toContain('Textarea')
+    expect(additionalComponentsArg.chip).toContain('Badge')
   })
 
   it('update export — creates branch + PR and returns prUrl', async () => {
@@ -99,6 +135,11 @@ describe('POST /api/design-systems/:id/export', () => {
     expect(res.body.type).toBe('update')
     expect(res.body.prNumber).toBe(3)
     expect(res.body.prUrl).toContain('pull/3')
+    expect(githubService.createUpdatePR).toHaveBeenCalledWith(
+      'ghs_abc', fakeRepo.repoFullName,
+      fakeTokens.colors, fakeTokens.typography, undefined, undefined,
+      fakeTokens.componentCode, fakeAdditionalComponents, fakeDS.name,
+    )
   })
 
   it('returns 403 if GitHub not connected', async () => {

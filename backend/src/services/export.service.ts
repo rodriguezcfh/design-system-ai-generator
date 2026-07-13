@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma'
 import * as githubService from './github.service'
+import type { AdditionalComponents } from './gemini.service'
 import {
   NotFoundError,
   TokensNotReadyError,
@@ -9,6 +10,22 @@ import {
 } from '../lib/errors'
 
 export { NotFoundError, TokensNotReadyError, WcagFailedError, GithubNotConnectedError, RepoConflictError }
+
+// Design systems generated before additionalComponents existed have it as null in the DB — fall
+// back to an empty-but-valid component so an export never ships a broken import. Regenerating
+// the design system replaces these with real AI-authored components.
+function fallbackComponent(name: string): string {
+  return `export function ${name}() {\n  return null\n}\n`
+}
+
+function withFallbacks(additionalComponents: AdditionalComponents | null): AdditionalComponents {
+  return additionalComponents ?? {
+    input: fallbackComponent('Input'),
+    alert: fallbackComponent('Alert'),
+    textarea: fallbackComponent('Textarea'),
+    chip: fallbackComponent('Badge'),
+  }
+}
 
 type ExportOptions = {
   repoName?: string
@@ -36,6 +53,7 @@ export async function exportDesignSystem(
   const colorScales = tokens.colorScales as Record<string, unknown> | null
   const typographyScale = tokens.typographyScale as unknown[] | null
   const componentCode = tokens.componentCode ?? ''
+  const additionalComponents = withFallbacks(tokens.additionalComponents as AdditionalComponents | null)
 
   if (!existingRepo) {
     const repoName = opts.repoName ?? `${ds.name.toLowerCase().replace(/\s+/g, '-')}-design-system`
@@ -44,7 +62,8 @@ export async function exportDesignSystem(
     const { fullName } = await githubService.createRepository(githubAuth.token, repoName, isPrivate)
 
     await githubService.scaffoldRepository(
-      githubAuth.token, fullName, colors, typography, colorScales, typographyScale, componentCode, repoName,
+      githubAuth.token, fullName, colors, typography, colorScales, typographyScale,
+      componentCode, additionalComponents, repoName,
     )
 
     const [repo, exportRecord] = await Promise.all([
@@ -65,7 +84,8 @@ export async function exportDesignSystem(
   }
 
   const { prNumber, prUrl, branchName, prTitle, prBody } = await githubService.createUpdatePR(
-    githubAuth.token, existingRepo.repoFullName, colors, typography, colorScales, typographyScale, componentCode, ds.name,
+    githubAuth.token, existingRepo.repoFullName, colors, typography, colorScales, typographyScale,
+    componentCode, additionalComponents, ds.name,
   )
 
   const exportRecord = await prisma.export.create({

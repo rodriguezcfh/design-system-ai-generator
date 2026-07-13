@@ -3,7 +3,7 @@ import prisma from '../lib/prisma'
 import { generateDesignSystem } from './gemini.service'
 import { validatePalette, enforcePaletteCompliance } from './wcag.service'
 import { buildColorScaleFamily, buildNeutralScaleFamily } from '../lib/colorScale'
-import { assertNoTypeScriptSyntax, assertNoDisallowedImports } from '../lib/validateComponentCode'
+import { assertValidComponentCode } from '../lib/validateComponentCode'
 import { NotFoundError, BriefNotReadyError, InvalidComponentCodeError, DisallowedImportError } from '../lib/errors'
 
 export { NotFoundError, BriefNotReadyError, InvalidComponentCodeError, DisallowedImportError }
@@ -24,8 +24,11 @@ export async function generateForDesignSystem(userId: string, designSystemId: st
     preferredBodyFont: brief.preferredBodyFont,
   })
 
-  assertNoTypeScriptSyntax(generated.buttonComponent)
-  assertNoDisallowedImports(generated.buttonComponent)
+  assertValidComponentCode('Button', generated.buttonComponent)
+  assertValidComponentCode('Input', generated.additionalComponents.input)
+  assertValidComponentCode('Alert', generated.additionalComponents.alert)
+  assertValidComponentCode('Textarea', generated.additionalComponents.textarea)
+  assertValidComponentCode('Badge', generated.additionalComponents.chip)
 
   const colors = enforcePaletteCompliance(generated.colors)
   const wcagReport = validatePalette(colors)
@@ -44,6 +47,7 @@ export async function generateForDesignSystem(userId: string, designSystemId: st
       colorScales: colorScales as unknown as Prisma.InputJsonValue,
       typographyScale: generated.typographyScale as unknown as Prisma.InputJsonValue,
       componentCode: generated.buttonComponent,
+      additionalComponents: generated.additionalComponents as unknown as Prisma.InputJsonValue,
       wcagValid: wcagReport.allPass,
       wcagReport: wcagReport as unknown as Prisma.InputJsonValue,
     },
@@ -54,6 +58,7 @@ export async function generateForDesignSystem(userId: string, designSystemId: st
       colorScales: colorScales as unknown as Prisma.InputJsonValue,
       typographyScale: generated.typographyScale as unknown as Prisma.InputJsonValue,
       componentCode: generated.buttonComponent,
+      additionalComponents: generated.additionalComponents as unknown as Prisma.InputJsonValue,
       wcagValid: wcagReport.allPass,
       wcagReport: wcagReport as unknown as Prisma.InputJsonValue,
     },

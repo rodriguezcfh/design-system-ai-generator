@@ -176,6 +176,111 @@ function ButtonPreview({ colors }: { colors: Record<string, string> }) {
   )
 }
 
+// Hand-authored, hardcoded-to-app-styles approximations of what the AI-generated Input/Alert/
+// Textarea/Badge will look like once exported — they never execute the generated JSX itself
+// (that would mean evaluating arbitrary AI-generated code in the browser).
+function InputPreview({ colors }: { colors: Record<string, string> }) {
+  const border = colors.border ?? colors.mutedForeground ?? '#d4d4d8'
+  const error = colors.error ?? '#ef4444'
+  const fg = colors.foreground ?? '#09090b'
+
+  return (
+    <div className="flex flex-wrap gap-4">
+      <div>
+        <input
+          placeholder="Default"
+          style={{ borderColor: border, color: fg }}
+          className="text-sm font-sans px-3 py-2 rounded-lg border bg-transparent outline-none w-40"
+          readOnly
+        />
+      </div>
+      <div>
+        <input
+          placeholder="Disabled"
+          disabled
+          style={{ borderColor: border, color: fg, opacity: 0.5 }}
+          className="text-sm font-sans px-3 py-2 rounded-lg border bg-transparent outline-none w-40 cursor-not-allowed"
+        />
+      </div>
+      <div>
+        <input
+          placeholder="Error"
+          style={{ borderColor: error, color: fg }}
+          className="text-sm font-sans px-3 py-2 rounded-lg border bg-transparent outline-none w-40"
+          readOnly
+        />
+        <p className="text-[11px] font-sans mt-1" style={{ color: error }}>Campo obligatorio</p>
+      </div>
+    </div>
+  )
+}
+
+function TextareaPreview({ colors }: { colors: Record<string, string> }) {
+  const border = colors.border ?? colors.mutedForeground ?? '#d4d4d8'
+  const fg = colors.foreground ?? '#09090b'
+
+  return (
+    <textarea
+      placeholder="Escribí un mensaje…"
+      rows={3}
+      style={{ borderColor: border, color: fg }}
+      className="text-sm font-sans px-3 py-2 rounded-lg border bg-transparent outline-none w-full max-w-sm resize-none"
+      readOnly
+    />
+  )
+}
+
+function AlertPreview({ colors }: { colors: Record<string, string> }) {
+  const variants: { key: string; label: string; title: string }[] = [
+    { key: 'success', label: 'success', title: 'Listo' },
+    { key: 'warning', label: 'warning', title: 'Atención' },
+    { key: 'error', label: 'error', title: 'Error' },
+  ]
+
+  return (
+    <div className="space-y-2">
+      {variants.map(v => {
+        const bg = colors[v.key] ?? '#e5e7eb'
+        const fg = colors[`${v.key}Foreground`] ?? '#09090b'
+        return (
+          <div
+            key={v.key}
+            style={{ backgroundColor: bg, color: fg }}
+            className="px-3.5 py-2.5 rounded-xl text-sm font-sans"
+          >
+            <p className="font-semibold">{v.title}</p>
+            <p className="text-xs opacity-90 mt-0.5">Mensaje de ejemplo para el estado {v.label}.</p>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function BadgePreview({ colors }: { colors: Record<string, string> }) {
+  const variants: { key: string; label: string; bgKey: string; fgKey: string }[] = [
+    { key: 'default', label: 'Etiqueta', bgKey: 'muted', fgKey: 'mutedForeground' },
+    { key: 'primary', label: 'Nuevo', bgKey: 'primary', fgKey: 'primaryForeground' },
+    { key: 'success', label: 'Activo', bgKey: 'success', fgKey: 'successForeground' },
+    { key: 'warning', label: 'Pendiente', bgKey: 'warning', fgKey: 'warningForeground' },
+    { key: 'error', label: 'Vencido', bgKey: 'error', fgKey: 'errorForeground' },
+  ]
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {variants.map(v => (
+        <span
+          key={v.key}
+          style={{ backgroundColor: colors[v.bgKey] ?? '#e5e7eb', color: colors[v.fgKey] ?? '#09090b' }}
+          className="px-2.5 py-1 rounded-full text-xs font-sans font-medium"
+        >
+          {v.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-4 py-16 text-center px-6">
@@ -321,29 +426,78 @@ export function PreviewPanel({ tokens, wcagReport, isGenerating }: Props) {
         )}
       </section>
 
-      {/* Button preview */}
-      <section>
-        <h3 className="text-xs font-mono font-medium text-ink-muted uppercase tracking-wider mb-3">
-          Componente — Button
+      {/* Component previews */}
+      <section className="space-y-5">
+        <h3 className="text-xs font-mono font-medium text-ink-muted uppercase tracking-wider">
+          Componentes
         </h3>
-        <div className="bg-white rounded-xl border border-zinc-200 p-4">
-          <ButtonPreview colors={tokens.colors} />
+
+        <div>
+          <p className="text-[11px] font-sans font-medium text-ink-muted mb-2">Button</p>
+          <div className="bg-white rounded-xl border border-zinc-200 p-4">
+            <ButtonPreview colors={tokens.colors} />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-sans font-medium text-ink-muted mb-2">Input</p>
+          <div className="bg-white rounded-xl border border-zinc-200 p-4">
+            <InputPreview colors={tokens.colors} />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-sans font-medium text-ink-muted mb-2">Textarea</p>
+          <div className="bg-white rounded-xl border border-zinc-200 p-4">
+            <TextareaPreview colors={tokens.colors} />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-sans font-medium text-ink-muted mb-2">Alert</p>
+          <div className="bg-white rounded-xl border border-zinc-200 p-4">
+            <AlertPreview colors={tokens.colors} />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-sans font-medium text-ink-muted mb-2">Badge / Chip</p>
+          <div className="bg-white rounded-xl border border-zinc-200 p-4">
+            <BadgePreview colors={tokens.colors} />
+          </div>
         </div>
       </section>
 
-      {/* Component code snippet */}
-      {tokens.componentCode && (
-        <section>
-          <h3 className="text-xs font-mono font-medium text-ink-muted uppercase tracking-wider mb-3">
-            Código generado
-          </h3>
-          <div className="bg-ink rounded-xl p-4 overflow-x-auto">
-            <pre className="text-xs font-mono text-zinc-300 whitespace-pre leading-relaxed">
-              {tokens.componentCode.slice(0, 500)}{tokens.componentCode.length > 500 ? '\n…' : ''}
-            </pre>
-          </div>
-        </section>
-      )}
+      {/* Generated code snippets */}
+      {(() => {
+        const snippets: { label: string; code: string | null | undefined }[] = [
+          { label: 'Button', code: tokens.componentCode },
+          { label: 'Input', code: tokens.additionalComponents?.input },
+          { label: 'Alert', code: tokens.additionalComponents?.alert },
+          { label: 'Textarea', code: tokens.additionalComponents?.textarea },
+          { label: 'Badge', code: tokens.additionalComponents?.chip },
+        ].filter((s): s is { label: string; code: string } => Boolean(s.code))
+
+        if (!snippets.length) return null
+
+        return (
+          <section className="space-y-3">
+            <h3 className="text-xs font-mono font-medium text-ink-muted uppercase tracking-wider">
+              Código generado
+            </h3>
+            {snippets.map(s => (
+              <div key={s.label}>
+                <p className="text-[11px] font-sans font-medium text-ink-muted mb-2">{s.label}</p>
+                <div className="bg-ink rounded-xl p-4 overflow-x-auto">
+                  <pre className="text-xs font-mono text-zinc-300 whitespace-pre leading-relaxed">
+                    {s.code.slice(0, 500)}{s.code.length > 500 ? '\n…' : ''}
+                  </pre>
+                </div>
+              </div>
+            ))}
+          </section>
+        )
+      })()}
       </div>
     </div>
   )

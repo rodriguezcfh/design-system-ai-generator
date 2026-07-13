@@ -87,6 +87,13 @@ export type TypographyStyle = {
   role: 'display' | 'heading' | 'body'
 }
 
+export type AdditionalComponents = {
+  input?: string
+  alert?: string
+  textarea?: string
+  chip?: string
+}
+
 export type DesignTokens = {
   id: string
   colors: ColorTokens
@@ -100,6 +107,7 @@ export type DesignTokens = {
   colorScales?: ColorScales | null
   typographyScale?: TypographyStyle[] | null
   componentCode: string | null
+  additionalComponents?: AdditionalComponents | null
   wcagValid: boolean
   wcagReport: WcagReport | null
 }

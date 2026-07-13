@@ -142,6 +142,86 @@ export const Disabled = { args: { children: 'Click me', disabled: true } }
 `
 }
 
+export function buildInputStories(): string {
+  return `import { Input } from './Input'
+
+export default {
+  title: 'Components/Input',
+  component: Input,
+  argTypes: {
+    placeholder: { control: 'text' },
+    disabled: { control: 'boolean' },
+    error: { control: 'boolean' },
+    errorMessage: { control: 'text' },
+  },
+}
+
+export const Default = { args: { placeholder: 'Escribí algo…' } }
+export const WithValue = { args: { defaultValue: 'Texto ingresado', placeholder: 'Escribí algo…' } }
+export const Disabled = { args: { placeholder: 'Escribí algo…', disabled: true } }
+export const Error = { args: { placeholder: 'Escribí algo…', error: true, errorMessage: 'Este campo es obligatorio' } }
+`
+}
+
+export function buildAlertStories(): string {
+  return `import { Alert } from './Alert'
+
+export default {
+  title: 'Components/Alert',
+  component: Alert,
+  argTypes: {
+    variant: { control: 'select', options: ['success', 'warning', 'error'] },
+    title: { control: 'text' },
+  },
+}
+
+export const Success = { args: { variant: 'success', title: 'Listo', children: 'La operación se completó con éxito.' } }
+export const Warning = { args: { variant: 'warning', title: 'Atención', children: 'Revisá los datos antes de continuar.' } }
+export const Error = { args: { variant: 'error', title: 'Error', children: 'Ocurrió un problema al procesar la solicitud.' } }
+`
+}
+
+export function buildTextareaStories(): string {
+  return `import { Textarea } from './Textarea'
+
+export default {
+  title: 'Components/Textarea',
+  component: Textarea,
+  argTypes: {
+    placeholder: { control: 'text' },
+    rows: { control: 'number' },
+    disabled: { control: 'boolean' },
+    error: { control: 'boolean' },
+    errorMessage: { control: 'text' },
+  },
+}
+
+export const Default = { args: { placeholder: 'Escribí un mensaje…', rows: 4 } }
+export const WithValue = { args: { defaultValue: 'Texto de varias líneas ingresado por el usuario.', rows: 4 } }
+export const Disabled = { args: { placeholder: 'Escribí un mensaje…', rows: 4, disabled: true } }
+export const Error = { args: { placeholder: 'Escribí un mensaje…', rows: 4, error: true, errorMessage: 'Este campo es obligatorio' } }
+`
+}
+
+export function buildBadgeStories(): string {
+  return `import { Badge } from './Badge'
+
+export default {
+  title: 'Components/Badge',
+  component: Badge,
+  argTypes: {
+    variant: { control: 'select', options: ['default', 'primary', 'success', 'warning', 'error'] },
+  },
+}
+
+export const Default = { args: { variant: 'default', children: 'Etiqueta' } }
+export const Primary = { args: { variant: 'primary', children: 'Nuevo' } }
+export const Success = { args: { variant: 'success', children: 'Activo' } }
+export const Warning = { args: { variant: 'warning', children: 'Pendiente' } }
+export const Error = { args: { variant: 'error', children: 'Vencido' } }
+`
+}
+
 // Static template — reads the token JSON files at build time so it never goes stale relative
 // to whatever design system exported it. Mirrors the section structure of
 // frontend/src/components/PreviewPanel.tsx (semantic / neutral / surface / scales / typography

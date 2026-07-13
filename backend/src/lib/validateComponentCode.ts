@@ -51,3 +51,16 @@ export function assertNoDisallowedImports(code: string): void {
   const packages = detectDisallowedImports(code)
   if (packages.length > 0) throw new DisallowedImportError(packages)
 }
+
+// Runs both guards for one named component and prefixes the component's name to whatever error
+// surfaces, so a 422 covering 5 generated components (Button + 4 more) says e.g. "Input: uses
+// 'interface'..." instead of a single ambiguous error that doesn't say which one failed.
+export function assertValidComponentCode(name: string, code: string): void {
+  try {
+    assertNoTypeScriptSyntax(code)
+    assertNoDisallowedImports(code)
+  } catch (err) {
+    if (err instanceof Error) err.message = `${name}: ${err.message}`
+    throw err
+  }
+}

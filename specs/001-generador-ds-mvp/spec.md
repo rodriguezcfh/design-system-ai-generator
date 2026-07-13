@@ -31,9 +31,9 @@ preferencias de una marca, genera a partir de eso un design system (paleta de co
   exporta el design system aprobado como un repo nuevo (scaffold de Storybook + Tailwind) o, si ya
   existe un repo para ese design system, como un PR de actualización con título/descripción
   generados por IA.
-- **FR-008 — Vista de resultados "Foundations"** *(nuevo por esta feature)*: la vista de preview
-  de un design system generado debe presentar los tokens organizados como foundations de un
-  design system real, no como una grilla plana:
+- **FR-008 — Vista de resultados "Foundations"**: la vista de preview de un design system
+  generado debe presentar los tokens organizados como foundations de un design system real, no
+  como una grilla plana:
   1. Encabezado de sección (eyebrow + título + subtítulo).
   2. Paleta de colores con conteo total de tokens.
   3. Colores semánticos (primary, accent/secondary, success, warning, error).
@@ -43,6 +43,19 @@ preferencias de una marca, genera a partir de eso un design system (paleta de co
   7. Tipografía: fuente principal.
   8. Escala tipográfica en tabla (estilo, preview en vivo, tamaño en px/rem, peso con nombre y
      valor numérico), de mayor a menor tamaño.
+- **FR-009 — Biblioteca de componentes ampliada** *(nuevo por esta feature)*: además del Button,
+  la generación produce 4 componentes más pensados para armar una landing page simple, cada uno
+  con un contrato de props fijo (independiente de lo que la IA elija estilísticamente) para que
+  las stories de Storybook que los documentan sean deterministas:
+  - **Input**: `{ placeholder, disabled, error, errorMessage, defaultValue }`. Estados: default,
+    foco (ring con el color primary), disabled, error (borde/texto en el color error + mensaje).
+  - **Textarea**: mismo contrato que Input más `rows` (default 4).
+  - **Alert**: `{ variant: 'success'|'warning'|'error', title, children }`. Usa los tokens
+    semánticos ya existentes (success/warning/error + sus foregrounds).
+  - **Badge** (Chip): `{ variant: 'default'|'primary'|'success'|'warning'|'error', children }`,
+    para categorías/etiquetas.
+  La vista de preview (FR-008) muestra los 4 componentes nuevos antes de exportar, y el export
+  a GitHub/Storybook (FR-007) los documenta con su propia story junto a la de Button.
 
 ## Fuera de alcance (por ahora)
 

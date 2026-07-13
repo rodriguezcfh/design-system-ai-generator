@@ -2,7 +2,7 @@ import { Octokit } from '@octokit/rest'
 import prisma from '../lib/prisma'
 import { encrypt, decrypt } from '../lib/crypto'
 import * as scaffold from '../lib/scaffold'
-import { generatePRDescription } from './gemini.service'
+import { generatePRDescription, type AdditionalComponents } from './gemini.service'
 import { RepoConflictError } from '../lib/errors'
 
 function toBase64(content: string): string {
@@ -99,6 +99,7 @@ export async function scaffoldRepository(
   colorScales: Record<string, unknown> | null,
   typographyScale: unknown[] | null,
   componentCode: string,
+  additionalComponents: AdditionalComponents,
   repoName: string,
 ): Promise<void> {
   const octokit = new Octokit({ auth: token })
@@ -118,6 +119,14 @@ export async function scaffoldRepository(
     { path: 'vercel.json', content: scaffold.buildVercelConfig() },
     { path: 'src/components/Button.jsx', content: componentCode },
     { path: 'src/components/Button.stories.jsx', content: scaffold.buildButtonStories() },
+    { path: 'src/components/Input.jsx', content: additionalComponents.input },
+    { path: 'src/components/Input.stories.jsx', content: scaffold.buildInputStories() },
+    { path: 'src/components/Alert.jsx', content: additionalComponents.alert },
+    { path: 'src/components/Alert.stories.jsx', content: scaffold.buildAlertStories() },
+    { path: 'src/components/Textarea.jsx', content: additionalComponents.textarea },
+    { path: 'src/components/Textarea.stories.jsx', content: scaffold.buildTextareaStories() },
+    { path: 'src/components/Badge.jsx', content: additionalComponents.chip },
+    { path: 'src/components/Badge.stories.jsx', content: scaffold.buildBadgeStories() },
     { path: 'src/foundations/Foundations.stories.jsx', content: scaffold.buildFoundationsStory() },
   ]
 
@@ -140,6 +149,7 @@ export async function createUpdatePR(
   colorScales: Record<string, unknown> | null,
   typographyScale: unknown[] | null,
   componentCode: string,
+  additionalComponents: AdditionalComponents,
   dsName: string,
 ): Promise<{
   prNumber: number
@@ -164,6 +174,14 @@ export async function createUpdatePR(
     { path: 'src/tokens/typographyScale.json', content: scaffold.buildTypographyScaleJson(typographyScale) },
     { path: 'tailwind.config.js', content: scaffold.buildTailwindConfig(colors) },
     { path: 'src/components/Button.jsx', content: componentCode },
+    { path: 'src/components/Input.jsx', content: additionalComponents.input },
+    { path: 'src/components/Input.stories.jsx', content: scaffold.buildInputStories() },
+    { path: 'src/components/Alert.jsx', content: additionalComponents.alert },
+    { path: 'src/components/Alert.stories.jsx', content: scaffold.buildAlertStories() },
+    { path: 'src/components/Textarea.jsx', content: additionalComponents.textarea },
+    { path: 'src/components/Textarea.stories.jsx', content: scaffold.buildTextareaStories() },
+    { path: 'src/components/Badge.jsx', content: additionalComponents.chip },
+    { path: 'src/components/Badge.stories.jsx', content: scaffold.buildBadgeStories() },
     { path: 'src/foundations/Foundations.stories.jsx', content: scaffold.buildFoundationsStory() },
   ]
 

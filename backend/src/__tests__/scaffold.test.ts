@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   buildPostcssConfig, buildVercelConfig,
   buildColorScalesJson, buildTypographyScaleJson, buildFoundationsStory,
+  buildInputStories, buildAlertStories, buildTextareaStories, buildBadgeStories,
 } from '../lib/scaffold'
-import { detectTypeScriptSyntax } from '../lib/validateComponentCode'
+import { detectTypeScriptSyntax, detectDisallowedImports } from '../lib/validateComponentCode'
 
 describe('buildPostcssConfig', () => {
   it('wires up the tailwindcss and autoprefixer plugins so Tailwind directives get processed', () => {
@@ -72,5 +73,35 @@ describe('buildFoundationsStory', () => {
     expect(story).toContain('Superficies')
     expect(story).toContain('Escalas de color')
     expect(story).toContain('Escala tipográfica')
+  })
+})
+
+describe.each([
+  ['buildInputStories', buildInputStories, 'Input', ['Default', 'WithValue', 'Disabled', 'Error']],
+  ['buildAlertStories', buildAlertStories, 'Alert', ['Success', 'Warning', 'Error']],
+  ['buildTextareaStories', buildTextareaStories, 'Textarea', ['Default', 'WithValue', 'Disabled', 'Error']],
+  ['buildBadgeStories', buildBadgeStories, 'Badge', ['Default', 'Primary', 'Success', 'Warning', 'Error']],
+] as const)('%s', (_label, builder, componentName, expectedStories) => {
+  it('is plain JS + JSX — no TypeScript syntax, no disallowed imports', () => {
+    const story = builder()
+    expect(detectTypeScriptSyntax(story)).toEqual([])
+    expect(detectDisallowedImports(story)).toEqual([])
+  })
+
+  it(`imports ${componentName} from its sibling component file`, () => {
+    expect(builder()).toContain(`from './${componentName}'`)
+  })
+
+  it('registers a CSF default export with a title and component reference', () => {
+    const story = builder()
+    expect(story).toContain(`title: 'Components/${componentName}'`)
+    expect(story).toContain(`component: ${componentName}`)
+  })
+
+  it('exports the expected named stories', () => {
+    const story = builder()
+    for (const name of expectedStories) {
+      expect(story).toContain(`export const ${name}`)
+    }
   })
 })
