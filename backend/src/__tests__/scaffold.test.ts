@@ -3,8 +3,30 @@ import {
   buildPostcssConfig, buildVercelConfig,
   buildColorScalesJson, buildTypographyScaleJson, buildFoundationsStory,
   buildInputStories, buildAlertStories, buildTextareaStories, buildBadgeStories,
+  buildTailwindConfig, buildTailwindPreset, buildPackageJson, buildIndexEntry, buildReadme,
 } from '../lib/scaffold'
 import { detectTypeScriptSyntax, detectDisallowedImports } from '../lib/validateComponentCode'
+
+const fakeColors = {
+  primary: '#1a56db', primaryForeground: '#ffffff',
+  secondary: '#7e3af2', secondaryForeground: '#ffffff',
+  background: '#ffffff', foreground: '#111928',
+}
+const fakeColorScales = {
+  primary: { familyName: 'Blue', shades: {
+    '50': '#eff6ff', '100': '#dbeafe', '200': '#bfdbfe', '300': '#93c5fd', '400': '#60a5fa',
+    '500': '#3b82f6', '600': '#2563eb', '700': '#1d4ed8', '800': '#1e40af', '900': '#1e3a8a',
+  } },
+  accent: { familyName: 'Purple', shades: {
+    '50': '#f5f3ff', '100': '#ede9fe', '200': '#ddd6fe', '300': '#c4b5fd', '400': '#a78bfa',
+    '500': '#8b5cf6', '600': '#7c3aed', '700': '#6d28d9', '800': '#5b21b6', '900': '#4c1d95',
+  } },
+  neutral: { familyName: 'Gray', shades: {
+    '50': '#f9fafb', '100': '#f3f4f6', '200': '#e5e7eb', '300': '#d1d5db', '400': '#9ca3af',
+    '500': '#6b7280', '600': '#4b5563', '700': '#374151', '800': '#1f2937', '900': '#111827',
+  } },
+}
+const fakeTypography = { fontFamily: 'Inter, sans-serif' }
 
 describe('buildPostcssConfig', () => {
   it('wires up the tailwindcss and autoprefixer plugins so Tailwind directives get processed', () => {
@@ -22,6 +44,87 @@ describe('buildVercelConfig', () => {
 
     expect(config.buildCommand).toBe('npm run build-storybook')
     expect(config.outputDirectory).toBe('storybook-static')
+  })
+})
+
+describe('buildTailwindConfig', () => {
+  it('delegates colors/typography to the shared preset instead of repeating them', () => {
+    const config = buildTailwindConfig(fakeColors, fakeColorScales)
+
+    expect(config).toContain("presets: [require('./tailwind-preset.js')]")
+    expect(config).not.toContain('primaryForeground')
+  })
+
+  it('keeps its own content globs for the local Storybook build', () => {
+    const config = buildTailwindConfig(fakeColors, fakeColorScales)
+
+    expect(config).toContain("content: ['./src/**/*.{js,jsx,ts,tsx}', './.storybook/**/*.{js,jsx}']")
+  })
+})
+
+describe('buildTailwindPreset', () => {
+  it('has no content key — a fixed content glob would break the consuming project\'s own scan', () => {
+    const preset = buildTailwindPreset(fakeColors, fakeColorScales, fakeTypography)
+    expect(preset).not.toContain('content:')
+  })
+
+  it('keeps flat semantic tokens that have no color scale (secondary, foreground, etc.)', () => {
+    const preset = buildTailwindPreset(fakeColors, fakeColorScales, fakeTypography)
+    expect(preset).toContain("'secondary': colors['secondary']")
+    expect(preset).toContain("'foreground': colors['foreground']")
+  })
+
+  it('nests scaled families (primary/accent/neutral) as DEFAULT + 50-900 shades', () => {
+    const preset = buildTailwindPreset(fakeColors, fakeColorScales, fakeTypography)
+    expect(preset).toContain("'primary': {")
+    expect(preset).toContain("DEFAULT: colors['primary']")
+    expect(preset).toContain("'50': colorScales['primary'].shades['50']")
+    expect(preset).toContain("'900': colorScales['primary'].shades['900']")
+    expect(preset).toContain("'accent': {")
+    expect(preset).toContain("'neutral': {")
+  })
+
+  it('does not duplicate a scaled key as a flat entry', () => {
+    const preset = buildTailwindPreset(fakeColors, fakeColorScales, fakeTypography)
+    expect(preset).not.toContain("'primary': colors['primary'],")
+  })
+
+  it('falls back to Inter when typography has no fontFamily', () => {
+    const preset = buildTailwindPreset(fakeColors, null, {})
+    expect(preset).toContain("['Inter', 'sans-serif']")
+  })
+})
+
+describe('buildPackageJson', () => {
+  it('sets main and exports so the repo resolves as an importable package', () => {
+    const pkg = JSON.parse(buildPackageJson('mi-brand-design-system'))
+
+    expect(pkg.main).toBe('src/index.js')
+    expect(pkg.exports['.']).toBe('./src/index.js')
+    expect(pkg.exports['./tailwind-preset']).toBe('./tailwind-preset.js')
+  })
+})
+
+describe('buildIndexEntry', () => {
+  it('re-exports all 5 components as named exports', () => {
+    const entry = buildIndexEntry()
+
+    for (const name of ['Button', 'Input', 'Textarea', 'Alert', 'Badge']) {
+      expect(entry).toContain(`export { ${name} } from './components/${name}'`)
+    }
+  })
+})
+
+describe('buildReadme', () => {
+  it('documents local Storybook, git install, tailwind preset extension, and per-component imports', () => {
+    const readme = buildReadme('mi-brand-design-system')
+
+    expect(readme).toContain('npm install')
+    expect(readme).toContain('npm run storybook')
+    expect(readme).toContain('npm install github:<owner>/mi-brand-design-system')
+    expect(readme).toContain("presets: [require('mi-brand-design-system/tailwind-preset')]")
+    expect(readme).toContain("import { Button, Input, Textarea, Alert, Badge } from 'mi-brand-design-system'")
+    expect(readme.toLowerCase()).toContain('sin compilar')
   })
 })
 

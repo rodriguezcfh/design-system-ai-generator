@@ -94,3 +94,52 @@ Un `DesignTokens` viejo tiene `additionalComponents: null`. `export.service.ts` 
 `withFallbacks()`: si es `null`, sustituye por componentes placeholder mínimos (`export function
 Input() { return null }`, etc.) en vez de romper el export — el usuario puede regenerar el design
 system para obtener los componentes reales.
+
+## Repo exportado instalable como dependencia (preset de Tailwind + package entry point)
+
+### Separación preset / config
+
+`tailwind.config.js` en el repo exportado mezclaba dos cosas que en realidad tienen audiencias
+distintas: la parte reutilizable (colores/tipografía derivados de los tokens del design system,
+útil para *cualquier* proyecto que consuma el paquete) y la parte específica de ese repo (`content`
+— los globs de archivos a escanear, que solo tienen sentido para el propio Storybook local, nunca
+para un consumidor externo). Se separan en dos archivos:
+
+- `tailwind-preset.js` (`buildTailwindPreset`): solo `theme.extend.colors` (tokens semánticos
+  planos + las escalas 50–900 de `colorScales` como objetos anidados, para que utilities como
+  `bg-primary-700` funcionen igual que `bg-primary`) y `theme.extend.fontFamily`. Sin `content` —
+  un preset con `content` fijo rompería el escaneo de clases del proyecto que lo importe.
+- `tailwind.config.js` (`buildTailwindConfig`): `content` propio del repo + `presets:
+  [require('./tailwind-preset.js')]`. Dejó de repetir colores/tipografía.
+
+Esto es lo que permite que un segundo proyecto haga `presets:
+[require('<paquete>/tailwind-preset')]` en su propio `tailwind.config.js` sin heredar (ni pisar)
+el `content` del repo exportado.
+
+### Paquete instalable vía git
+
+`package.json` gana `main: "src/index.js"` y `exports` (`"."` → `src/index.js`, `"./tailwind-preset"`
+→ `tailwind-preset.js`), y se agrega `src/index.js` (`buildIndexEntry`) reexportando los 5
+componentes como named exports. Esto es suficiente para que `npm install
+github:<owner>/<repo>` deje el paquete resoluble vía `require('<paquete>')` /
+`import { Button } from '<paquete>'` — no hace falta un registry ni un paso de publish, porque npm
+soporta instalar directamente desde una URL de GitHub.
+
+Los componentes se siguen distribuyendo como JSX sin compilar (mismo criterio que ya regía para el
+Storybook local: el consumidor necesita un bundler que entienda JSX — Vite, Next, CRA, etc. — lo
+cual es la norma en proyectos React modernos). No se agrega un paso de build/transpile a esta
+feature; queda documentado explícitamente en el README para que no sea una sorpresa.
+
+`buildIndexEntry()` reexporta los 5 nombres sin importar si el valor real es el componente
+generado por Gemini o el stub de `fallbackComponent()` de `withFallbacks()` (`export function X()
+{ return null }`) — ambos son módulos JS válidos con el mismo named export, así que el
+re-export funciona igual en cualquiera de los dos casos sin lógica condicional adicional.
+
+### README generado (`buildReadme`)
+
+Nuevo archivo en la raíz del repo exportado cubriendo: cómo correr el Storybook local (`npm
+install && npm run storybook`), cómo instalar el repo como dependencia desde otro proyecto (`npm
+install github:<owner>/<repo>`), cómo extender el `tailwind.config.js` del proyecto consumidor
+con el preset, un ejemplo de import por cada uno de los 5 componentes, y la nota sobre JSX sin
+compilar. Es la única documentación de "cómo se consume este paquete" — no vive en el código de la
+app, porque el repo exportado es un artefacto independiente que puede sobrevivir sin la app.

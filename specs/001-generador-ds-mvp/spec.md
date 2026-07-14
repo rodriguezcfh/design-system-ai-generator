@@ -56,6 +56,23 @@ preferencias de una marca, genera a partir de eso un design system (paleta de co
     para categorías/etiquetas.
   La vista de preview (FR-008) muestra los 4 componentes nuevos antes de exportar, y el export
   a GitHub/Storybook (FR-007) los documenta con su propia story junto a la de Button.
+- **FR-010 — Repo exportado instalable como dependencia** *(nuevo por esta feature)*: el repo que
+  genera FR-007 no debe ser solo un Storybook standalone — también debe poder consumirse como
+  paquete desde otro proyecto:
+  - `npm install github:<owner>/<repo>` debe dejar los 5 componentes (Button, Input, Textarea,
+    Alert, Badge) importables como named exports desde la raíz del paquete
+    (`import { Button } from '<paquete>'`). Los componentes se distribuyen como JSX sin compilar
+    (sin paso de build); esto queda documentado en el README del repo exportado, no oculto.
+  - El repo debe exponer un preset de Tailwind (`tailwind-preset.js`) con los tokens semánticos y
+    las escalas de color 50–900, para que un proyecto consumidor pueda extender su propio
+    `tailwind.config.js` con `presets: [require('<paquete>/tailwind-preset')]` y obtener tanto los
+    colores semánticos (`bg-primary`) como las utilities de escala (`bg-primary-700`) sin
+    duplicar tokens a mano.
+  - El `tailwind.config.js` propio del repo exportado (el que usa su Storybook local) debe
+    consumir ese mismo preset en vez de repetir la configuración de colores/tipografía.
+  - El README del repo exportado debe cubrir: cómo correr el Storybook local, cómo instalar el
+    repo como dependencia, cómo extender el preset de Tailwind, y un ejemplo de import por cada
+    uno de los 5 componentes.
 
 ## Fuera de alcance (por ahora)
 

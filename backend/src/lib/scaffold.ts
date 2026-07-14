@@ -14,33 +14,73 @@ export function buildTypographyScaleJson(typographyScale: unknown[] | null): str
   return JSON.stringify(typographyScale ?? [], null, 2)
 }
 
-export function buildTailwindConfig(colors: Record<string, string>): string {
-  const colorEntries = Object.entries(colors)
+export function buildTailwindConfig(
+  _colors: Record<string, string>,
+  _colorScales: Record<string, unknown> | null,
+): string {
+  return `/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: ['./src/**/*.{js,jsx,ts,tsx}', './.storybook/**/*.{js,jsx}'],
+  presets: [require('./tailwind-preset.js')],
+  plugins: [],
+}
+`
+}
+
+type ColorScaleFamily = { familyName?: string; shades?: Record<string, string> }
+
+const SCALE_SHADES = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900']
+
+export function buildTailwindPreset(
+  colors: Record<string, string>,
+  colorScales: Record<string, unknown> | null,
+  typography: Record<string, unknown>,
+): string {
+  const scales = (colorScales ?? {}) as Record<string, ColorScaleFamily>
+  const scaleKeys = Object.keys(scales).filter((key) => scales[key]?.shades)
+
+  const flatEntries = Object.entries(colors)
+    .filter(([key]) => !scaleKeys.includes(key))
     .map(([key]) => {
       const tailwindKey = key.replace(/([A-Z])/g, '-$1').toLowerCase()
       return `        '${tailwindKey}': colors['${key}'],`
     })
     .join('\n')
 
+  const scaleEntries = scaleKeys
+    .map((key) => {
+      const tailwindKey = key.replace(/([A-Z])/g, '-$1').toLowerCase()
+      const hasFlatDefault = Object.prototype.hasOwnProperty.call(colors, key)
+      const lines = [
+        ...(hasFlatDefault ? [`          DEFAULT: colors['${key}'],`] : []),
+        ...SCALE_SHADES.map((shade) => `          '${shade}': colorScales['${key}'].shades['${shade}'],`),
+      ]
+      return `        '${tailwindKey}': {\n${lines.join('\n')}\n        },`
+    })
+    .join('\n')
+
+  const fontFamilyValue = typeof typography.fontFamily === 'string' ? typography.fontFamily : null
+  const fontFamily = fontFamilyValue
+    ? fontFamilyValue.split(',').map((f) => f.trim())
+    : ['Inter', 'sans-serif']
+  const fontFamilyLiteral = `[${fontFamily.map((f) => `'${f}'`).join(', ')}]`
+
   return `const colors = require('./src/tokens/colors.json')
-const typography = require('./src/tokens/typography.json')
+const colorScales = require('./src/tokens/colorScales.json')
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ['./src/**/*.{js,jsx,ts,tsx}', './.storybook/**/*.{js,jsx}'],
   theme: {
     extend: {
       colors: {
-${colorEntries}
+${flatEntries}
+${scaleEntries}
       },
       fontFamily: {
-        sans: typography.fontFamily
-          ? typography.fontFamily.split(',').map(f => f.trim())
-          : ['Inter', 'sans-serif'],
+        sans: ${fontFamilyLiteral},
       },
     },
   },
-  plugins: [],
 }
 `
 }
@@ -72,6 +112,11 @@ export function buildPackageJson(repoName: string): string {
       name: repoName,
       private: true,
       version: '0.0.1',
+      main: 'src/index.js',
+      exports: {
+        '.': './src/index.js',
+        './tailwind-preset': './tailwind-preset.js',
+      },
       scripts: {
         storybook: 'storybook dev -p 6006',
         'build-storybook': 'storybook build',
@@ -118,6 +163,66 @@ export default preview
 
 export function buildIndexCss(): string {
   return `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n`
+}
+
+export function buildIndexEntry(): string {
+  return `export { Button } from './components/Button'
+export { Input } from './components/Input'
+export { Textarea } from './components/Textarea'
+export { Alert } from './components/Alert'
+export { Badge } from './components/Badge'
+`
+}
+
+export function buildReadme(repoName: string): string {
+  return `# ${repoName}
+
+Design system generado con SuperDSAI Generator: tokens de color/tipografía + 5 componentes
+(Button, Input, Textarea, Alert, Badge) documentados en Storybook.
+
+## Storybook local
+
+\`\`\`
+npm install
+npm run storybook
+\`\`\`
+
+## Instalar como dependencia
+
+Este repo se puede instalar directamente desde GitHub en otro proyecto:
+
+\`\`\`
+npm install github:<owner>/${repoName}
+\`\`\`
+
+### Componentes
+
+Los 5 componentes se exportan desde la raíz del paquete:
+
+\`\`\`jsx
+import { Button, Input, Textarea, Alert, Badge } from '${repoName}'
+\`\`\`
+
+Los componentes se distribuyen como JSX sin compilar (no hay paso de build). Tu proyecto
+consumidor necesita un bundler que entienda JSX (Vite, Next.js, Create React App, etc.), lo cual
+ya es el caso en la gran mayoría de proyectos React modernos.
+
+### Preset de Tailwind
+
+El paquete expone un preset de Tailwind con los tokens de color (semánticos + escalas 50–900) y
+la tipografía de este design system. Extendé el \`tailwind.config.js\` de tu proyecto:
+
+\`\`\`js
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  presets: [require('${repoName}/tailwind-preset')],
+  content: ['./src/**/*.{js,jsx,ts,tsx}'],
+}
+\`\`\`
+
+Esto habilita tanto los tokens semánticos (\`bg-primary\`, \`text-error\`, etc.) como las utilities
+de escala (\`bg-primary-700\`, \`bg-accent-100\`, etc.).
+`
 }
 
 export function buildButtonStories(): string {
