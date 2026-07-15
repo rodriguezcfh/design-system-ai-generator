@@ -3,7 +3,8 @@ import {
   buildPostcssConfig, buildVercelConfig,
   buildColorScalesJson, buildTypographyScaleJson, buildFoundationsStory,
   buildInputStories, buildAlertStories, buildTextareaStories, buildBadgeStories,
-  buildTailwindConfig, buildTailwindPreset, buildPackageJson, buildIndexEntry, buildReadme,
+  buildTailwindConfig, buildTailwindPreset, computeTailwindThemeExtend,
+  buildPackageJson, buildIndexEntry, buildReadme,
 } from '../lib/scaffold'
 import { detectTypeScriptSyntax, detectDisallowedImports } from '../lib/validateComponentCode'
 
@@ -62,36 +63,49 @@ describe('buildTailwindConfig', () => {
   })
 })
 
+describe('computeTailwindThemeExtend', () => {
+  it('keeps flat semantic tokens that have no color scale, kebab-cased', () => {
+    const theme = computeTailwindThemeExtend(fakeColors, fakeColorScales, fakeTypography)
+    expect(theme.colors['secondary']).toBe('#7e3af2')
+    expect(theme.colors['foreground']).toBe('#111928')
+    expect(theme.colors['primary-foreground']).toBe('#ffffff')
+  })
+
+  it('nests scaled families (primary/accent/neutral) as DEFAULT + 50-900 shades', () => {
+    const theme = computeTailwindThemeExtend(fakeColors, fakeColorScales, fakeTypography)
+    expect(theme.colors['primary']).toMatchObject({
+      DEFAULT: '#1a56db', '50': '#eff6ff', '900': '#1e3a8a',
+    })
+    expect(theme.colors['accent']).toMatchObject({ '500': '#8b5cf6' })
+    expect(theme.colors['accent']).not.toHaveProperty('DEFAULT')
+    expect(theme.colors['neutral']).toMatchObject({ '500': '#6b7280' })
+  })
+
+  it('falls back to Inter when typography has no fontFamily', () => {
+    const theme = computeTailwindThemeExtend(fakeColors, null, {})
+    expect(theme.fontFamily.sans).toEqual(['Inter', 'sans-serif'])
+  })
+
+  it('splits a comma-separated fontFamily into a trimmed array', () => {
+    const theme = computeTailwindThemeExtend(fakeColors, null, { fontFamily: 'Poppins, sans-serif' })
+    expect(theme.fontFamily.sans).toEqual(['Poppins', 'sans-serif'])
+  })
+})
+
 describe('buildTailwindPreset', () => {
   it('has no content key — a fixed content glob would break the consuming project\'s own scan', () => {
     const preset = buildTailwindPreset(fakeColors, fakeColorScales, fakeTypography)
     expect(preset).not.toContain('content:')
   })
 
-  it('keeps flat semantic tokens that have no color scale (secondary, foreground, etc.)', () => {
+  it('embeds the computed theme.extend as literal JSON, resolvable via require()', () => {
     const preset = buildTailwindPreset(fakeColors, fakeColorScales, fakeTypography)
-    expect(preset).toContain("'secondary': colors['secondary']")
-    expect(preset).toContain("'foreground': colors['foreground']")
-  })
-
-  it('nests scaled families (primary/accent/neutral) as DEFAULT + 50-900 shades', () => {
-    const preset = buildTailwindPreset(fakeColors, fakeColorScales, fakeTypography)
-    expect(preset).toContain("'primary': {")
-    expect(preset).toContain("DEFAULT: colors['primary']")
-    expect(preset).toContain("'50': colorScales['primary'].shades['50']")
-    expect(preset).toContain("'900': colorScales['primary'].shades['900']")
-    expect(preset).toContain("'accent': {")
-    expect(preset).toContain("'neutral': {")
-  })
-
-  it('does not duplicate a scaled key as a flat entry', () => {
-    const preset = buildTailwindPreset(fakeColors, fakeColorScales, fakeTypography)
-    expect(preset).not.toContain("'primary': colors['primary'],")
-  })
-
-  it('falls back to Inter when typography has no fontFamily', () => {
-    const preset = buildTailwindPreset(fakeColors, null, {})
-    expect(preset).toContain("['Inter', 'sans-serif']")
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = new Function('module', 'exports', preset + '\nreturn module.exports')({ exports: {} }, {})
+    expect(mod.theme.extend.colors.primary.DEFAULT).toBe('#1a56db')
+    expect(mod.theme.extend.colors.primary['700']).toBe('#1d4ed8')
+    expect(mod.theme.extend.colors.secondary).toBe('#7e3af2')
+    expect(mod.theme.extend.fontFamily.sans).toEqual(['Inter', 'sans-serif'])
   })
 })
 
@@ -99,9 +113,15 @@ describe('buildPackageJson', () => {
   it('sets main and exports so the repo resolves as an importable package', () => {
     const pkg = JSON.parse(buildPackageJson('mi-brand-design-system'))
 
-    expect(pkg.main).toBe('src/index.js')
-    expect(pkg.exports['.']).toBe('./src/index.js')
+    expect(pkg.main).toBe('./dist/index.js')
+    expect(pkg.module).toBe('./dist/index.esm.js')
+    expect(pkg.exports['.']).toEqual({
+      import: './dist/index.esm.js',
+      require: './dist/index.js',
+      default: './dist/index.js',
+    })
     expect(pkg.exports['./tailwind-preset']).toBe('./tailwind-preset.js')
+    expect(pkg.exports['./styles.css']).toBe('./dist/index.css')
   })
 })
 
@@ -124,7 +144,53 @@ describe('buildReadme', () => {
     expect(readme).toContain('npm install github:<owner>/mi-brand-design-system')
     expect(readme).toContain("presets: [require('mi-brand-design-system/tailwind-preset')]")
     expect(readme).toContain("import { Button, Input, Textarea, Alert, Badge } from 'mi-brand-design-system'")
-    expect(readme.toLowerCase()).toContain('sin compilar')
+  })
+
+  it('documents the precompiled dist bundle and the styles.css import, not raw uncompiled JSX', () => {
+    const readme = buildReadme('mi-brand-design-system')
+
+    expect(readme).toContain('precompilados')
+    expect(readme).toContain("import 'mi-brand-design-system/styles.css'")
+  })
+
+  it('frames dist+CSS as the main path and the tailwind preset as secondary/optional', () => {
+    const readme = buildReadme('mi-brand-design-system')
+
+    const mainIdx = readme.indexOf('Camino principal')
+    const advancedIdx = readme.indexOf('Camino avanzado')
+    expect(mainIdx).toBeGreaterThan(-1)
+    expect(advancedIdx).toBeGreaterThan(mainIdx)
+  })
+
+  it('warns that dist/ is regenerated on every export and must not be hand-edited', () => {
+    const readme = buildReadme('mi-brand-design-system')
+    expect(readme.toLowerCase()).toContain('no lo edites a mano')
+  })
+})
+
+describe('README ↔ package.json exports stay in sync', () => {
+  // Regression test for the prueba.3 incident: the README's example import paths drifted from
+  // the package.json `exports` map that was actually generated (README said "./dist/index.css",
+  // exports only declared "./styles.css") after a manual repo patch. Repo name intentionally
+  // contains a literal "." (like the real "prueba.3") to make sure escaping is correct.
+  it('every example import/require path in the README resolves to a real exports key', () => {
+    const repoName = 'prueba.3'
+    const pkg = JSON.parse(buildPackageJson(repoName))
+    const readme = buildReadme(repoName)
+
+    const escapedRepoName = repoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pathPattern = new RegExp(`['"]${escapedRepoName}(/[^'"]*)?['"]`, 'g')
+
+    const referencedKeys = new Set<string>()
+    let match: RegExpExecArray | null
+    while ((match = pathPattern.exec(readme)) !== null) {
+      referencedKeys.add(match[1] ? `.${match[1]}` : '.')
+    }
+
+    expect(referencedKeys.size).toBeGreaterThan(0)
+    for (const key of referencedKeys) {
+      expect(Object.keys(pkg.exports)).toContain(key)
+    }
   })
 })
 

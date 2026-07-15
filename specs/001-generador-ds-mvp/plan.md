@@ -118,17 +118,12 @@ el `content` del repo exportado.
 
 ### Paquete instalable vía git
 
-`package.json` gana `main: "src/index.js"` y `exports` (`"."` → `src/index.js`, `"./tailwind-preset"`
-→ `tailwind-preset.js`), y se agrega `src/index.js` (`buildIndexEntry`) reexportando los 5
-componentes como named exports. Esto es suficiente para que `npm install
-github:<owner>/<repo>` deje el paquete resoluble vía `require('<paquete>')` /
-`import { Button } from '<paquete>'` — no hace falta un registry ni un paso de publish, porque npm
-soporta instalar directamente desde una URL de GitHub.
-
-Los componentes se siguen distribuyendo como JSX sin compilar (mismo criterio que ya regía para el
-Storybook local: el consumidor necesita un bundler que entienda JSX — Vite, Next, CRA, etc. — lo
-cual es la norma en proyectos React modernos). No se agrega un paso de build/transpile a esta
-feature; queda documentado explícitamente en el README para que no sea una sorpresa.
+`package.json` gana `exports`/`main`/`module` apuntando a `dist/` (ver corrección post-lanzamiento
+abajo), y se agrega `src/index.js` (`buildIndexEntry`) reexportando los 5 componentes como named
+exports desde el código fuente. Esto es suficiente para que `npm install github:<owner>/<repo>`
+deje el paquete resoluble vía `require('<paquete>')` / `import { Button } from '<paquete>'` — no
+hace falta un registry ni un paso de publish, porque npm soporta instalar directamente desde una
+URL de GitHub.
 
 `buildIndexEntry()` reexporta los 5 nombres sin importar si el valor real es el componente
 generado por Gemini o el stub de `fallbackComponent()` de `withFallbacks()` (`export function X()
@@ -139,7 +134,106 @@ re-export funciona igual en cualquiera de los dos casos sin lógica condicional 
 
 Nuevo archivo en la raíz del repo exportado cubriendo: cómo correr el Storybook local (`npm
 install && npm run storybook`), cómo instalar el repo como dependencia desde otro proyecto (`npm
-install github:<owner>/<repo>`), cómo extender el `tailwind.config.js` del proyecto consumidor
-con el preset, un ejemplo de import por cada uno de los 5 componentes, y la nota sobre JSX sin
-compilar. Es la única documentación de "cómo se consume este paquete" — no vive en el código de la
-app, porque el repo exportado es un artefacto independiente que puede sobrevivir sin la app.
+install github:<owner>/<repo>`), las dos formas de aplicar estilos (CSS ya compilado vs. preset de
+Tailwind), y un ejemplo de import por cada uno de los 5 componentes. Es la única documentación de
+"cómo se consume este paquete" — no vive en el código de la app, porque el repo exportado es un
+artefacto independiente que puede sobrevivir sin la app.
+
+## Corrección post-lanzamiento: componentes precompilados en `dist/`
+
+### El bug real
+
+La primera versión de esta feature dejaba `package.json` apuntando `main`/`exports` directo a
+`src/index.js`, que reexporta JSX sin compilar. Esto rompía en la práctica: el optimizador de
+dependencias de Vite (basado en esbuild) intenta pre-bundlear cualquier paquete de `node_modules`
+asumiendo JS plano, y falla con `Failed to resolve entry for package "..."` en cuanto la cadena de
+imports de un dependency package contiene JSX real sin transformar. No era un problema de
+`.gitignore` ni de archivos faltantes — `dist/` directamente no existía todavía, porque nunca se
+compilaba nada.
+
+### La corrección
+
+`backend/src/lib/buildPackage.ts` agrega dos funciones que corren en el momento del export (no en
+el consumidor, que nunca ejecuta un build):
+
+- `buildComponentBundles(sources)`: usa la API de `esbuild` (asíncrona — `buildSync` no soporta
+  plugins) con un plugin de módulos virtuales que resuelve `virtual:Button`, `virtual:Input`, etc.
+  contra los strings de código ya generados por Gemini (nunca toca disco), transforma JSX
+  (`jsx: 'automatic'`) y bundlea a CommonJS y a ESM en paralelo. `react`/`react-dom` quedan
+  `external` — el bundle nunca incluye una copia propia de React, usa la del proyecto consumidor
+  (evita el clásico "Invalid hook call" por doble instancia de React).
+- `buildComponentCss(sources, themeExtend)`: corre PostCSS + Tailwind programáticamente sobre
+  `@tailwind components; @tailwind utilities;`, con `content: [{ raw, extension: 'jsx' }]` por
+  componente (Tailwind v3 soporta escanear strings en memoria, no requiere archivos en disco) y
+  `theme.extend` calculado por `computeTailwindThemeExtend` (ver abajo). Resultado: un
+  `dist/index.css` purgado a exactamente las clases que los 5 componentes usan — ideal para quien
+  no quiere tocar su propio `tailwind.config.js`. Corre con `preflight: false` a propósito: un
+  reset global (`@tailwind base`) filtrándose desde una librería de componentes pisaría los
+  estilos base de la app consumidora entera, no solo los componentes.
+
+`scaffold.ts` gana `computeTailwindThemeExtend(colors, colorScales, typography)`, que separa el
+cómputo del objeto `theme.extend` (antes solo existía como texto plantillado dentro de
+`buildTailwindPreset`) de su serialización a archivo. Ambos consumidores — el `tailwind-preset.js`
+que se commitea (`buildTailwindPreset`, ahora solo serializa el resultado como JSON literal en vez
+de un `require()` en runtime de `colors.json`/`colorScales.json`) y el build de CSS en memoria
+(`buildComponentCss`) — comparten esa única fuente de verdad.
+
+`github.service.ts` llama a ambas funciones en `scaffoldRepository` y en `createUpdatePR` (cada
+export/update recompila desde cero, porque el código de los componentes pudo cambiar) y agrega
+`dist/index.js`, `dist/index.esm.js`, `dist/index.css` a la lista de archivos escritos, junto con
+un `.gitignore` (`buildGitignore`) que deliberadamente **no** excluye `dist/` — la razón de ser de
+este archivo es justamente que sí quede versionado, porque un paquete instalado vía git nunca
+corre `npm run build`.
+
+`package.json` pasa a `main: './dist/index.js'`, `module: './dist/index.esm.js'` (convención de
+bundlers para preferir ESM) y un `exports['.']` condicional (`import`/`require`/`default`), más
+`exports['./styles.css']` apuntando al CSS compilado. El README (FR-010) documenta ambas formas de
+aplicar estilos como alternativas explícitas, no una sola verdad.
+
+## Segunda consolidación: el incidente de `prueba.3`
+
+### Qué pasó
+
+Después del fix de arriba, `prueba.3` (un design system exportado antes del fix) tenía un
+`package.json` viejo y roto. En vez de re-exportar/actualizar desde la app, alguien parcheó el
+repo exportado a mano: agregó un `dist/index.css` y cambió el `exports` de `package.json` a mano,
+pero con una ruta (`./dist/index.css`) que no coincidía con la que el README documentaba
+(`./styles.css`). Resultado: un repo exportado que ya no reflejaba lo que el generador produce, y
+un import roto contra un archivo que el `exports` real no declaraba. Esto confirmó dos huecos
+reales, no hipotéticos:
+
+1. **`createUpdatePR` nunca reescribía `package.json`.** Solo `scaffoldRepository` (export
+   inicial) lo hacía. Un design system exportado antes de esta feature, actualizado después via
+   PR, se quedaría con su `package.json` viejo para siempre — el `dist/*` nuevo se agregaría, pero
+   apuntando a un entry point que el `package.json` ni conocía. Se agregó `package.json` a la
+   lista de `filesToUpdate` de `createUpdatePR`.
+2. **Nada impedía que el README y el `package.json` generados quedaran desincronizados** si
+   alguien tocaba uno sin el otro (a mano en el repo exportado, o editando `buildReadme`/
+   `buildPackageJson` en el futuro sin querer). Se agregó un test (`scaffold.test.ts`, describe
+   `README ↔ package.json exports stay in sync`) que extrae por regex cada ruta de import/require
+   de ejemplo del README generado (`import '<paquete>/x'`, `from '<paquete>'`,
+   `require('<paquete>/x')`) y falla si esa ruta no es una key real del `exports` que
+   `buildPackageJson` generó — usando `'prueba.3'` como nombre de repo de prueba (con el punto
+   literal del nombre real) para blindar el propio escapeo de la regex.
+
+### Refuerzos adicionales
+
+- `dist/index.js`, `dist/index.esm.js` y `dist/index.css` ahora empiezan con un comentario
+  (`/* Archivo generado automáticamente en cada exportación — no editar a mano, se
+  sobreescribe. */`), y el README repite la advertencia en prosa. La intención no es impedir
+  técnicamente una edición manual (no hay forma de hacerlo en un repo git normal), sino dejar
+  imposible de ignorar que cualquier cambio ahí se pierde en la próxima exportación.
+- El README (`buildReadme`) pasa de presentar "dos opciones equivalentes" a dos caminos con roles
+  explícitos: **principal** (`dist/` + `styles.css`, recomendado, funciona sin Tailwind propio) y
+  **avanzado/opcional** (`tailwind-preset.js`, para quien construye sus propios componentes con
+  los mismos tokens). Ambos siguen derivando de `computeTailwindThemeExtend`, así que no hay forma
+  de que un cambio de color quede reflejado en uno y no el otro.
+
+### Por qué la verificación de punta a punta no se puede automatizar completamente
+
+Instalar `github:<owner>/<repo>` real y confirmar que un `npm run dev`/`build` externo no falla
+requiere: (a) un design system real exportado a través del flujo autenticado de la app, y (b) una
+cuenta de GitHub conectada por OAuth (consentimiento en navegador). Ninguna de las dos se puede
+fabricar de forma segura fuera de una sesión real del usuario — así que esa verificación final
+(incluyendo re-exportar `prueba.3` para confirmar que el flujo pisa limpio el parche manual) la
+corre el usuario desde la app, no el agente.

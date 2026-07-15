@@ -2,11 +2,36 @@ import { Octokit } from '@octokit/rest'
 import prisma from '../lib/prisma'
 import { encrypt, decrypt } from '../lib/crypto'
 import * as scaffold from '../lib/scaffold'
+import { buildComponentBundles, buildComponentCss, type ComponentSources } from '../lib/buildPackage'
 import { generatePRDescription, type AdditionalComponents } from './gemini.service'
 import { RepoConflictError } from '../lib/errors'
 
 function toBase64(content: string): string {
   return Buffer.from(content, 'utf8').toString('base64')
+}
+
+async function buildDistFiles(
+  colors: Record<string, string>,
+  colorScales: Record<string, unknown> | null,
+  typography: Record<string, unknown>,
+  componentCode: string,
+  additionalComponents: AdditionalComponents,
+): Promise<{ cjs: string; esm: string; css: string }> {
+  const sources: ComponentSources = {
+    Button: componentCode,
+    Input: additionalComponents.input,
+    Textarea: additionalComponents.textarea,
+    Alert: additionalComponents.alert,
+    Badge: additionalComponents.chip,
+  }
+  const themeExtend = scaffold.computeTailwindThemeExtend(colors, colorScales, typography)
+
+  const [{ cjs, esm }, css] = await Promise.all([
+    buildComponentBundles(sources),
+    buildComponentCss(sources, themeExtend),
+  ])
+
+  return { cjs, esm, css }
 }
 
 // ─── OAuth ───────────────────────────────────────────────────────────────────
@@ -105,8 +130,11 @@ export async function scaffoldRepository(
   const octokit = new Octokit({ auth: token })
   const [owner, repo] = fullName.split('/')
 
+  const { cjs, esm, css } = await buildDistFiles(colors, colorScales, typography, componentCode, additionalComponents)
+
   const files: { path: string; content: string }[] = [
     { path: 'package.json', content: scaffold.buildPackageJson(repoName) },
+    { path: '.gitignore', content: scaffold.buildGitignore() },
     { path: '.storybook/main.js', content: scaffold.buildStorybookMain() },
     { path: '.storybook/preview.js', content: scaffold.buildStorybookPreview() },
     { path: 'src/index.css', content: scaffold.buildIndexCss() },
@@ -119,6 +147,9 @@ export async function scaffoldRepository(
     { path: 'postcss.config.js', content: scaffold.buildPostcssConfig() },
     { path: 'vercel.json', content: scaffold.buildVercelConfig() },
     { path: 'src/index.js', content: scaffold.buildIndexEntry() },
+    { path: 'dist/index.js', content: cjs },
+    { path: 'dist/index.esm.js', content: esm },
+    { path: 'dist/index.css', content: css },
     { path: 'README.md', content: scaffold.buildReadme(repoName) },
     { path: 'src/components/Button.jsx', content: componentCode },
     { path: 'src/components/Button.stories.jsx', content: scaffold.buildButtonStories() },
@@ -170,14 +201,21 @@ export async function createUpdatePR(
 
   await octokit.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: mainSha })
 
+  const { cjs, esm, css } = await buildDistFiles(colors, colorScales, typography, componentCode, additionalComponents)
+
   const filesToUpdate = [
+    { path: 'package.json', content: scaffold.buildPackageJson(repo) },
     { path: 'src/tokens/colors.json', content: scaffold.buildColorsJson(colors) },
     { path: 'src/tokens/typography.json', content: scaffold.buildTypographyJson(typography) },
     { path: 'src/tokens/colorScales.json', content: scaffold.buildColorScalesJson(colorScales) },
     { path: 'src/tokens/typographyScale.json', content: scaffold.buildTypographyScaleJson(typographyScale) },
     { path: 'tailwind.config.js', content: scaffold.buildTailwindConfig(colors, colorScales) },
     { path: 'tailwind-preset.js', content: scaffold.buildTailwindPreset(colors, colorScales, typography) },
+    { path: '.gitignore', content: scaffold.buildGitignore() },
     { path: 'src/index.js', content: scaffold.buildIndexEntry() },
+    { path: 'dist/index.js', content: cjs },
+    { path: 'dist/index.esm.js', content: esm },
+    { path: 'dist/index.css', content: css },
     { path: 'README.md', content: scaffold.buildReadme(repo) },
     { path: 'src/components/Button.jsx', content: componentCode },
     { path: 'src/components/Input.jsx', content: additionalComponents.input },

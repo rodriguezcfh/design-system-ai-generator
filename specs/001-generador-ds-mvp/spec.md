@@ -56,23 +56,40 @@ preferencias de una marca, genera a partir de eso un design system (paleta de co
     para categorías/etiquetas.
   La vista de preview (FR-008) muestra los 4 componentes nuevos antes de exportar, y el export
   a GitHub/Storybook (FR-007) los documenta con su propia story junto a la de Button.
-- **FR-010 — Repo exportado instalable como dependencia** *(nuevo por esta feature)*: el repo que
-  genera FR-007 no debe ser solo un Storybook standalone — también debe poder consumirse como
-  paquete desde otro proyecto:
+- **FR-010 — Repo exportado instalable como dependencia** *(nuevo por esta feature; corregido y
+  consolidado post-lanzamiento tras un incidente real — ver plan.md)*: el repo que genera FR-007
+  no debe ser solo un Storybook standalone — también debe poder consumirse como paquete desde otro
+  proyecto. Esta es la forma **oficial y única** de distribuirlo; no depende de ediciones manuales
+  en el repo exportado, que se pierden en la siguiente exportación.
   - `npm install github:<owner>/<repo>` debe dejar los 5 componentes (Button, Input, Textarea,
     Alert, Badge) importables como named exports desde la raíz del paquete
-    (`import { Button } from '<paquete>'`). Los componentes se distribuyen como JSX sin compilar
-    (sin paso de build); esto queda documentado en el README del repo exportado, no oculto.
-  - El repo debe exponer un preset de Tailwind (`tailwind-preset.js`) con los tokens semánticos y
-    las escalas de color 50–900, para que un proyecto consumidor pueda extender su propio
-    `tailwind.config.js` con `presets: [require('<paquete>/tailwind-preset')]` y obtener tanto los
-    colores semánticos (`bg-primary`) como las utilities de escala (`bg-primary-700`) sin
-    duplicar tokens a mano.
+    (`import { Button } from '<paquete>'`), y resolver correctamente con bundlers modernos
+    (Vite, webpack, etc.) sin errores de resolución de entrada.
+  - **Camino principal (recomendado)**: los componentes se distribuyen **precompilados**
+    (`dist/index.js` CommonJS + `dist/index.esm.js` ESM, `react`/`react-dom` externos) junto con
+    `dist/index.css` (hoja de estilos purgada a las clases que los 5 componentes realmente usan)
+    — funciona en cualquier bundler/framework sin depender de que el consumidor tenga Tailwind
+    configurado. Un paquete instalado vía git nunca corre un paso de build, así que este
+    compilado tiene que existir físicamente en el repo, y queda marcado como generado
+    (no editable a mano). El código fuente sin compilar sigue disponible en `src/components/`
+    para quien lo quiera inspeccionar directamente.
+  - **Camino avanzado/opcional**: un preset de Tailwind (`tailwind-preset.js`) con los tokens
+    semánticos y las escalas de color 50–900, para quien prefiera construir sus propios
+    componentes reusando la paleta de marca en vez de (o además de) usar los 5 ya armados,
+    extendiendo su propio `tailwind.config.js` con `presets: [require('<paquete>/tailwind-preset')]`.
+  - Ambos caminos derivan del mismo cómputo de tema (una única fuente de verdad) — un cambio de
+    color nunca puede quedar reflejado en uno y no en el otro.
   - El `tailwind.config.js` propio del repo exportado (el que usa su Storybook local) debe
     consumir ese mismo preset en vez de repetir la configuración de colores/tipografía.
+  - `dist/*`, `tailwind-preset.js` y `package.json` (con su campo `exports`) se **regeneran en
+    toda exportación**, tanto la inicial (repo nuevo) como cualquier actualización posterior
+    (PR de update) — nunca solo en la primera.
   - El README del repo exportado debe cubrir: cómo correr el Storybook local, cómo instalar el
-    repo como dependencia, cómo extender el preset de Tailwind, y un ejemplo de import por cada
-    uno de los 5 componentes.
+    repo como dependencia, los dos caminos de consumo con sus roles diferenciados, un ejemplo de
+    import por cada uno de los 5 componentes, y la advertencia de que `dist/` es generado.
+  - El generador debe tener un test que falle si algún ejemplo de import/require documentado en
+    el README no corresponde a una key real del `exports` de `package.json` — para que el README
+    y el paquete nunca puedan desincronizarse silenciosamente.
 
 ## Fuera de alcance (por ahora)
 

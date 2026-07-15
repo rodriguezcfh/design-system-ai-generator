@@ -29,59 +29,68 @@ module.exports = {
 
 type ColorScaleFamily = { familyName?: string; shades?: Record<string, string> }
 
-const SCALE_SHADES = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900']
+export type TailwindThemeExtend = {
+  colors: Record<string, string | Record<string, string>>
+  fontFamily: Record<string, string[]>
+}
+
+// Shared by buildTailwindPreset (emits this as the shipped tailwind-preset.js) and
+// buildPackage.ts (drives the in-memory Tailwind CSS build for dist/index.css) — one
+// source of truth for "what does this design system's theme.extend look like".
+export function computeTailwindThemeExtend(
+  colors: Record<string, string>,
+  colorScales: Record<string, unknown> | null,
+  typography: Record<string, unknown>,
+): TailwindThemeExtend {
+  const scales = (colorScales ?? {}) as Record<string, ColorScaleFamily>
+  const scaleKeys = Object.keys(scales).filter((key) => scales[key]?.shades)
+
+  const themeColors: Record<string, string | Record<string, string>> = {}
+
+  for (const [key, value] of Object.entries(colors)) {
+    if (scaleKeys.includes(key)) continue
+    const tailwindKey = key.replace(/([A-Z])/g, '-$1').toLowerCase()
+    themeColors[tailwindKey] = value
+  }
+
+  for (const key of scaleKeys) {
+    const tailwindKey = key.replace(/([A-Z])/g, '-$1').toLowerCase()
+    const hasFlatDefault = Object.prototype.hasOwnProperty.call(colors, key)
+    themeColors[tailwindKey] = {
+      ...(hasFlatDefault ? { DEFAULT: colors[key] } : {}),
+      ...(scales[key].shades as Record<string, string>),
+    }
+  }
+
+  const fontFamilyValue = typeof typography.fontFamily === 'string' ? typography.fontFamily : null
+  const fontFamily = {
+    sans: fontFamilyValue ? fontFamilyValue.split(',').map((f) => f.trim()) : ['Inter', 'sans-serif'],
+  }
+
+  return { colors: themeColors, fontFamily }
+}
 
 export function buildTailwindPreset(
   colors: Record<string, string>,
   colorScales: Record<string, unknown> | null,
   typography: Record<string, unknown>,
 ): string {
-  const scales = (colorScales ?? {}) as Record<string, ColorScaleFamily>
-  const scaleKeys = Object.keys(scales).filter((key) => scales[key]?.shades)
+  const themeExtend = computeTailwindThemeExtend(colors, colorScales, typography)
 
-  const flatEntries = Object.entries(colors)
-    .filter(([key]) => !scaleKeys.includes(key))
-    .map(([key]) => {
-      const tailwindKey = key.replace(/([A-Z])/g, '-$1').toLowerCase()
-      return `        '${tailwindKey}': colors['${key}'],`
-    })
-    .join('\n')
-
-  const scaleEntries = scaleKeys
-    .map((key) => {
-      const tailwindKey = key.replace(/([A-Z])/g, '-$1').toLowerCase()
-      const hasFlatDefault = Object.prototype.hasOwnProperty.call(colors, key)
-      const lines = [
-        ...(hasFlatDefault ? [`          DEFAULT: colors['${key}'],`] : []),
-        ...SCALE_SHADES.map((shade) => `          '${shade}': colorScales['${key}'].shades['${shade}'],`),
-      ]
-      return `        '${tailwindKey}': {\n${lines.join('\n')}\n        },`
-    })
-    .join('\n')
-
-  const fontFamilyValue = typeof typography.fontFamily === 'string' ? typography.fontFamily : null
-  const fontFamily = fontFamilyValue
-    ? fontFamilyValue.split(',').map((f) => f.trim())
-    : ['Inter', 'sans-serif']
-  const fontFamilyLiteral = `[${fontFamily.map((f) => `'${f}'`).join(', ')}]`
-
-  return `const colors = require('./src/tokens/colors.json')
-const colorScales = require('./src/tokens/colorScales.json')
-
-/** @type {import('tailwindcss').Config} */
+  return `/** @type {import('tailwindcss').Config} */
 module.exports = {
   theme: {
-    extend: {
-      colors: {
-${flatEntries}
-${scaleEntries}
-      },
-      fontFamily: {
-        sans: ${fontFamilyLiteral},
-      },
-    },
+    extend: ${JSON.stringify(themeExtend, null, 2).split('\n').join('\n    ')},
   },
 }
+`
+}
+
+// dist/ is intentionally NOT ignored: a git-installed package (`npm install github:owner/repo`)
+// never runs a build step, so the compiled bundle has to be a physical, committed file.
+export function buildGitignore(): string {
+  return `node_modules/
+storybook-static/
 `
 }
 
@@ -112,10 +121,17 @@ export function buildPackageJson(repoName: string): string {
       name: repoName,
       private: true,
       version: '0.0.1',
-      main: 'src/index.js',
+      main: './dist/index.js',
+      module: './dist/index.esm.js',
       exports: {
-        '.': './src/index.js',
+        '.': {
+          import: './dist/index.esm.js',
+          require: './dist/index.js',
+          default: './dist/index.js',
+        },
         './tailwind-preset': './tailwind-preset.js',
+        './styles.css': './dist/index.css',
+        './package.json': './package.json',
       },
       scripts: {
         storybook: 'storybook dev -p 6006',
@@ -195,22 +211,31 @@ Este repo se puede instalar directamente desde GitHub en otro proyecto:
 npm install github:<owner>/${repoName}
 \`\`\`
 
-### Componentes
+## Camino principal: usar los 5 componentes ya armados
 
-Los 5 componentes se exportan desde la raíz del paquete:
+Es el camino recomendado — funciona en cualquier bundler/framework (Vite, Next.js, CRA, etc.) sin
+depender de que tu proyecto tenga Tailwind configurado.
 
 \`\`\`jsx
 import { Button, Input, Textarea, Alert, Badge } from '${repoName}'
+import '${repoName}/styles.css'
 \`\`\`
 
-Los componentes se distribuyen como JSX sin compilar (no hay paso de build). Tu proyecto
-consumidor necesita un bundler que entienda JSX (Vite, Next.js, Create React App, etc.), lo cual
-ya es el caso en la gran mayoría de proyectos React modernos.
+Los componentes se distribuyen **precompilados** en \`dist/\` (CommonJS + ESM, \`react\`/
+\`react-dom\` quedan como peer — usan la instancia de React de tu proyecto), junto con
+\`dist/index.css\`, una hoja de estilos ya purgada a exactamente las clases que estos 5 componentes
+usan. Esto es necesario porque un paquete instalado vía \`npm install github:...\` nunca corre un
+paso de build: los archivos compilados tienen que estar físicamente en el repo.
 
-### Preset de Tailwind
+> **\`dist/\` se regenera automáticamente en cada exportación/actualización desde el generador —
+> no lo edites a mano, cualquier cambio manual se pierde en el próximo export.** El código fuente
+> sin compilar sigue disponible en \`src/components/\` para quien quiera inspeccionarlo.
 
-El paquete expone un preset de Tailwind con los tokens de color (semánticos + escalas 50–900) y
-la tipografía de este design system. Extendé el \`tailwind.config.js\` de tu proyecto:
+## Camino avanzado (opcional): construir tus propios componentes con estos tokens
+
+Si en vez de (o además de) usar los 5 componentes ya armados querés construir los tuyos propios
+reusando la misma paleta de marca (colores semánticos + escalas 50–900 + tipografía), extendé tu
+\`tailwind.config.js\` con el preset de este paquete:
 
 \`\`\`js
 /** @type {import('tailwindcss').Config} */
@@ -221,7 +246,9 @@ module.exports = {
 \`\`\`
 
 Esto habilita tanto los tokens semánticos (\`bg-primary\`, \`text-error\`, etc.) como las utilities
-de escala (\`bg-primary-700\`, \`bg-accent-100\`, etc.).
+de escala (\`bg-primary-700\`, \`bg-accent-100\`, etc.), generadas por tu propio Tailwind con
+tree-shaking de lo que no uses. El preset y el \`dist/index.css\` del camino principal se derivan
+de la misma fuente de tokens, así que nunca quedan desincronizados entre sí.
 `
 }
 
