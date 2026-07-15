@@ -88,6 +88,8 @@ export async function exportDS(req: Request, res: Response): Promise<void> {
       res.status(422).json({ error: err.message })
     } else if (err instanceof exportService.RepoConflictError) {
       res.status(409).json({ error: err.message, suggestedName: err.suggestedName })
+    } else if (err instanceof exportService.UnresolvableComponentExportError) {
+      res.status(422).json({ error: err.message })
     } else {
       console.error('Error exporting design system:', err)
       res.status(500).json({ error: 'Internal server error' })

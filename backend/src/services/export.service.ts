@@ -7,9 +7,17 @@ import {
   WcagFailedError,
   GithubNotConnectedError,
   RepoConflictError,
+  UnresolvableComponentExportError,
 } from '../lib/errors'
 
-export { NotFoundError, TokensNotReadyError, WcagFailedError, GithubNotConnectedError, RepoConflictError }
+export {
+  NotFoundError,
+  TokensNotReadyError,
+  WcagFailedError,
+  GithubNotConnectedError,
+  RepoConflictError,
+  UnresolvableComponentExportError,
+}
 
 // Design systems generated before additionalComponents existed have it as null in the DB — fall
 // back to an empty-but-valid component so an export never ships a broken import. Regenerating

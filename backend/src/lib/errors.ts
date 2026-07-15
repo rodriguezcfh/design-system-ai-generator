@@ -56,6 +56,17 @@ export class DisallowedImportError extends Error {
   }
 }
 
+export class UnresolvableComponentExportError extends Error {
+  constructor(componentName: string) {
+    super(
+      `${componentName}: saved component code doesn't export a named "${componentName}" (even after normalizing common ` +
+      `"export default" patterns), so it can't be bundled for export. Regenerate the design system ` +
+      `(press "Generar" again) to produce code that matches the expected export contract.`,
+    )
+    this.name = 'UnresolvableComponentExportError'
+  }
+}
+
 export class GithubNotConnectedError extends Error {
   constructor() {
     super('GitHub account not connected')
