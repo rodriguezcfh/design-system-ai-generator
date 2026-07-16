@@ -23,9 +23,18 @@ export async function listDesignSystems(userId: string) {
 export async function getDesignSystem(userId: string, id: string) {
   const ds = await prisma.designSystem.findFirst({
     where: { id, userId },
-    select: { id: true, name: true, status: true, createdAt: true, updatedAt: true, tokens: true, repository: true },
+    select: {
+      id: true, name: true, status: true, createdAt: true, updatedAt: true, tokens: true,
+      // A design system can have several EMBEDDED repos but at most one STANDALONE — the
+      // frontend only ever needs the STANDALONE one (e.g. for the Vercel deploy button, which
+      // only makes sense for a repo that actually has a Storybook to deploy).
+      repositories: { where: { mode: 'STANDALONE' }, take: 1 },
+    },
   })
   if (!ds) return null
+
+  const { repositories, ...rest } = ds
+  const designSystem = { ...rest, repository: repositories?.[0] ?? null }
 
   const [conversation, brief] = await Promise.all([
     prisma.conversation.findUnique({
@@ -39,7 +48,7 @@ export async function getDesignSystem(userId: string, id: string) {
   ])
 
   return {
-    designSystem: ds,
+    designSystem,
     conversation: conversation ? { ...conversation, brief } : null,
   }
 }

@@ -32,7 +32,7 @@ model DesignSystem {
   conversation Conversation?
   brandBrief   BrandBrief?
   tokens       DesignTokens?
-  repository   Repository?
+  repositories Repository[]
   exports      Export[]
 
   @@map("design_systems")
@@ -126,13 +126,15 @@ model GithubConnection {
 }
 
 model Repository {
-  id              String     @id @default(cuid())
-  designSystemId  String     @unique @map("design_system_id")
-  repoFullName    String     @map("repo_full_name")
-  visibility      Visibility @default(PRIVATE)
-  deploymentUrl   String?    @map("deployment_url")
-  vercelProjectId String?    @map("vercel_project_id")
-  createdAt       DateTime   @default(now()) @map("created_at")
+  id              String         @id @default(cuid())
+  designSystemId  String         @map("design_system_id")
+  repoFullName    String         @map("repo_full_name")
+  mode            RepositoryMode @default(STANDALONE)
+  targetPath      String?        @map("target_path")
+  visibility      Visibility     @default(PRIVATE)
+  deploymentUrl   String?        @map("deployment_url")
+  vercelProjectId String?        @map("vercel_project_id")
+  createdAt       DateTime       @default(now()) @map("created_at")
 
   designSystem DesignSystem @relation(fields: [designSystemId], references: [id], onDelete: Cascade)
 
@@ -142,6 +144,15 @@ model Repository {
 enum Visibility {
   PUBLIC
   PRIVATE
+}
+
+// STANDALONE: repo propio con scaffold completo (Storybook + paquete instalable), a lo sumo uno
+// por DesignSystem (enforzado en export.service.ts, ya no por constraint de DB — ver plan.md).
+// EMBEDDED: tokens + componentes inyectados dentro de una carpeta del repo del propio usuario;
+// puede haber varios por DesignSystem (uno por proyecto destino distinto).
+enum RepositoryMode {
+  STANDALONE
+  EMBEDDED
 }
 
 model Export {

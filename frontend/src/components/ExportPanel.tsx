@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react'
-import type { Export } from '../api/client'
+import type { Export, ExportMode, ExportRequestOptions } from '../api/client'
 
 type Props = {
   dsId: string
   status: string
   exports: Export[]
-  onExport: (repoName?: string, visibility?: 'public' | 'private') => Promise<void>
+  onExport: (opts: ExportRequestOptions) => Promise<void>
   onConnectGitHub: () => void
   isGithubConnected: boolean
   canExport: boolean
@@ -115,25 +115,56 @@ export function ExportPanel({
 }: Props) {
   const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<ExportMode>('embedded')
   const [showRepoModal, setShowRepoModal] = useState(false)
   const [repoName, setRepoName] = useState('')
   const [visibility, setVisibility] = useState<'public' | 'private'>('private')
+  const [targetRepoFullName, setTargetRepoFullName] = useState('')
+  const [targetPath, setTargetPath] = useState('design-system')
   const [isDownloadingTokens, setIsDownloadingTokens] = useState(false)
 
   const hasExports = exports.length > 0
-  const isInitialExport = !hasExports
+  // A STANDALONE repo already exists iff repoFullName is set — hasExports alone isn't enough
+  // once EMBEDDED exports (which never set repoFullName) can also populate the exports history.
+  const isInitialStandaloneExport = !repoFullName
   const notGenerated = status === 'DRAFT'
 
   async function handleExport() {
     setError(null)
-    if (isInitialExport && !showRepoModal) {
+
+    if (mode === 'embedded') {
+      if (!targetRepoFullName.trim()) {
+        setError('Indicá el repo destino (formato usuario/repo)')
+        return
+      }
+      setIsExporting(true)
+      try {
+        await onExport({
+          mode: 'embedded',
+          targetRepoFullName: targetRepoFullName.trim(),
+          targetPath: targetPath.trim() || undefined,
+        })
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Error al exportar'
+        if (message.includes('GitHub account not connected')) {
+          onConnectGitHub()
+        } else {
+          setError(message)
+        }
+      } finally {
+        setIsExporting(false)
+      }
+      return
+    }
+
+    if (isInitialStandaloneExport && !showRepoModal) {
       setShowRepoModal(true)
       return
     }
     setIsExporting(true)
     setShowRepoModal(false)
     try {
-      await onExport(repoName || undefined, visibility)
+      await onExport({ mode: 'standalone', repoName: repoName || undefined, visibility })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al exportar'
       if (message.includes('GitHub')) {
@@ -166,7 +197,14 @@ export function ExportPanel({
           <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
           Exportando…
         </>
-      ) : hasExports ? (
+      ) : mode === 'embedded' ? (
+        <>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          Agregar a mi proyecto
+        </>
+      ) : !isInitialStandaloneExport ? (
         <>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -184,12 +222,35 @@ export function ExportPanel({
     </button>
   )
 
+  const modeSelector = (
+    <div className="flex gap-2">
+      {([
+        { key: 'embedded' as const, label: 'Agregar a mi proyecto' },
+        { key: 'standalone' as const, label: 'Repo reutilizable' },
+      ]).map(opt => (
+        <button
+          key={opt.key}
+          onClick={() => { setMode(opt.key); setError(null); setShowRepoModal(false) }}
+          className={`flex-1 text-xs font-sans py-1.5 rounded-lg border transition-colors
+            ${mode === opt.key
+              ? 'border-accent bg-accent-light text-accent font-medium'
+              : 'border-zinc-200 text-ink-muted hover:border-zinc-300'
+            }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
       <Section
         index={1}
         title="Exportar a GitHub"
-        description="Guarda el código y el proyecto de Storybook en tu repositorio, listo para correr con npm install && npm run storybook."
+        description={mode === 'embedded'
+          ? 'Agrega los tokens y componentes como código fuente dentro de tu propio proyecto — sin Storybook ni paquete instalable.'
+          : 'Guarda el código y el proyecto de Storybook en un repo propio, instalable como dependencia (npm install github:...).'}
         action={isGithubConnected && !showRepoModal ? primaryExportButton : undefined}
       >
         {!isGithubConnected ? (
@@ -203,6 +264,8 @@ export function ExportPanel({
           </div>
         ) : (
           <div className="space-y-3">
+            {modeSelector}
+
             {notGenerated && (
               <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
                 <span className="text-amber-600 text-sm">⚠️</span>
@@ -219,7 +282,33 @@ export function ExportPanel({
               </div>
             )}
 
-            {showRepoModal && (
+            {mode === 'embedded' && (
+              <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 space-y-3">
+                <p className="text-sm font-sans font-medium text-ink">Repo destino</p>
+                <div>
+                  <label className="text-xs font-sans text-ink-muted mb-1 block">Repositorio (usuario/repo)</label>
+                  <input
+                    type="text"
+                    value={targetRepoFullName}
+                    onChange={e => setTargetRepoFullName(e.target.value)}
+                    placeholder="usuario/mi-landing"
+                    className="input-field text-sm w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-sans text-ink-muted mb-1 block">Carpeta destino (opcional)</label>
+                  <input
+                    type="text"
+                    value={targetPath}
+                    onChange={e => setTargetPath(e.target.value)}
+                    placeholder="design-system"
+                    className="input-field text-sm w-full"
+                  />
+                </div>
+              </div>
+            )}
+
+            {mode === 'standalone' && showRepoModal && (
               <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 space-y-3">
                 <p className="text-sm font-sans font-medium text-ink">Configurar repositorio</p>
                 <div>

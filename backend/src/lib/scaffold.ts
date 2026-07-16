@@ -252,6 +252,43 @@ de la misma fuente de tokens, así que nunca quedan desincronizados entre sí.
 `
 }
 
+// EMBEDDED mode: these files become the user's own project code from the first commit (same
+// idea as shadcn/ui) — no "generated, do not edit" banner here, unlike STANDALONE's dist/*.
+export function buildInstallMd(targetPath: string): string {
+  return `# Design system
+
+Tokens y componentes agregados a este proyecto por SuperDSAI Generator, en \`${targetPath}/\`.
+Estos archivos ya son parte de tu proyecto — podés editarlos libremente, no dependen del
+generador ni se van a sobreescribir salvo que vuelvas a exportar sobre el mismo repo.
+
+## Setup — una sola línea a mano
+
+Agregá el preset de Tailwind a tu \`tailwind.config.js\` (no lo hacemos automáticamente: no
+conocemos el formato ni el contenido actual de tu config, y una edición automática mal hecha
+puede romper tu build):
+
+\`\`\`js
+module.exports = {
+  presets: [require('./${targetPath}/tailwind-preset')],
+  // ...el resto de tu config sin cambios
+}
+\`\`\`
+
+## Uso
+
+\`\`\`jsx
+import { Button } from './${targetPath}/components/Button'
+import { Input } from './${targetPath}/components/Input'
+import { Textarea } from './${targetPath}/components/Textarea'
+import { Alert } from './${targetPath}/components/Alert'
+import { Badge } from './${targetPath}/components/Badge'
+\`\`\`
+
+Los tokens en bruto (colores, tipografía, escalas) están en \`${targetPath}/tokens/\` si los
+necesitás fuera de Tailwind.
+`
+}
+
 export function buildButtonStories(): string {
   return `import { Button } from './Button'
 

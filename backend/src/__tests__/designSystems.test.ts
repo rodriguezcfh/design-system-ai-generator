@@ -156,9 +156,9 @@ describe('GET /api/design-systems/:id', () => {
   it('includes the exported repo full name so the frontend can build a Vercel deploy link and survive a reload', async () => {
     const fakeRepository = {
       id: 'repo-1', designSystemId: 'ds-1', repoFullName: 'octocat/mi-brand-design-system',
-      visibility: 'PRIVATE', createdAt: new Date(),
+      mode: 'STANDALONE', targetPath: null, visibility: 'PRIVATE', createdAt: new Date(),
     }
-    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue({ ...fakeDS, status: 'EXPORTED', repository: fakeRepository })
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue({ ...fakeDS, status: 'EXPORTED', repositories: [fakeRepository] })
     vi.mocked(prisma.conversation.findUnique).mockResolvedValue(null)
     vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(null)
 
@@ -171,8 +171,21 @@ describe('GET /api/design-systems/:id', () => {
       repoFullName: 'octocat/mi-brand-design-system',
     })
     expect(prisma.designSystem.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ select: expect.objectContaining({ repository: true }) }),
+      expect.objectContaining({ select: expect.objectContaining({ repositories: expect.anything() }) }),
     )
+  })
+
+  it('resolves to a null repository when the design system has no STANDALONE repo at all', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue({ ...fakeDS, status: 'GENERATED', repositories: [] })
+    vi.mocked(prisma.conversation.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(null)
+
+    const res = await request(app)
+      .get('/api/design-systems/ds-1')
+      .set(auth)
+
+    expect(res.status).toBe(200)
+    expect(res.body.designSystem.repository).toBeNull()
   })
 })
 

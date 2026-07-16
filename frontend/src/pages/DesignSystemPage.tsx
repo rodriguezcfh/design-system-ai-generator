@@ -4,7 +4,7 @@ import { Layout } from '../components/Layout'
 import { ChatPanel } from '../components/ChatPanel'
 import { PreviewPanel } from '../components/PreviewPanel'
 import { ExportPanel } from '../components/ExportPanel'
-import { api, type ChatMessage, type DesignTokens, type WcagReport, type Export } from '../api/client'
+import { api, type ChatMessage, type DesignTokens, type WcagReport, type Export, type ExportRequestOptions } from '../api/client'
 
 const GITHUB_OAUTH_URL = `https://github.com/login/oauth/authorize?client_id=${import.meta.env.VITE_GITHUB_CLIENT_ID}&scope=repo`
 
@@ -117,9 +117,9 @@ export default function DesignSystemPage() {
     }
   }
 
-  async function handleExport(repoName?: string, visibility?: 'public' | 'private') {
+  async function handleExport(opts: ExportRequestOptions) {
     if (!id) return
-    const result = await api.designSystems.export(id, repoName, visibility)
+    const result = await api.designSystems.export(id, opts)
     setDsStatus('EXPORTED')
     if (result.repoFullName) setRepoFullName(result.repoFullName)
     // Refresh exports

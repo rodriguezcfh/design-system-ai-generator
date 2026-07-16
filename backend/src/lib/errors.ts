@@ -82,3 +82,24 @@ export class RepoConflictError extends Error {
     this.suggestedName = suggestedName
   }
 }
+
+export class GithubRepoNotFoundError extends Error {
+  constructor(repoFullName: string) {
+    super(`Repository "${repoFullName}" not found or not accessible with your connected GitHub account.`)
+    this.name = 'GithubRepoNotFoundError'
+  }
+}
+
+export class GithubRepoAccessDeniedError extends Error {
+  constructor(repoFullName: string) {
+    super(`Your connected GitHub account doesn't have write access to "${repoFullName}".`)
+    this.name = 'GithubRepoAccessDeniedError'
+  }
+}
+
+export class MissingTargetRepoError extends Error {
+  constructor() {
+    super('targetRepoFullName is required when exporting in EMBEDDED mode')
+    this.name = 'MissingTargetRepoError'
+  }
+}

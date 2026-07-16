@@ -27,10 +27,32 @@ preferencias de una marca, genera a partir de eso un design system (paleta de co
 - **FR-006 — Validación WCAG 2.1 AA**: toda paleta generada se valida contra pares
   foreground/background conocidos (botones, texto, estados). Una paleta que no pasa AA bloquea el
   export (no bloquea la generación ni la visualización).
-- **FR-007 — Export a GitHub/Storybook**: con una cuenta de GitHub conectada (OAuth), el usuario
-  exporta el design system aprobado como un repo nuevo (scaffold de Storybook + Tailwind) o, si ya
-  existe un repo para ese design system, como un PR de actualización con título/descripción
-  generados por IA.
+- **FR-007 — Export a GitHub, en dos modalidades** *(ampliado por esta feature)*: con una cuenta
+  de GitHub conectada (OAuth), el usuario elige cómo exportar el design system aprobado. Las dos
+  modalidades cubren necesidades distintas y no son intercambiables:
+  - **`EMBEDDED` — "Agregar a mi proyecto" (default)**: pensada para el caso más común, un
+    usuario armando un proyecto puntual (ej. una landing). El usuario indica un repo de GitHub que
+    ya es **suyo** (existente o recién creado por él, no por la app) y, opcionalmente, una carpeta
+    destino (default `design-system/`). El export escribe ahí adentro únicamente los tokens
+    (`colors.json`, `typography.json`, `colorScales.json`, `typographyScale.json`), el preset de
+    Tailwind, y los 5 componentes como código fuente — nada de Storybook, `package.json` propio,
+    ni paso de compilación. Son archivos que pasan a ser del proyecto del usuario desde el momento
+    en que se mergean, igual que el patrón de shadcn/ui (se copian y se pueden editar libremente,
+    no son un paquete versionado que hay que actualizar). Si el repo destino está vacío, el export
+    hace un commit inicial directo a la rama principal; si ya tiene contenido, crea una rama +
+    Pull Request, tocando únicamente archivos dentro de esa carpeta. No se edita el
+    `tailwind.config` del usuario — el export no conoce su formato ni contenido actual y tocarlo
+    mal rompería su proyecto. En cambio, un `INSTALL.md` (y el cuerpo del PR) indican la única
+    línea que hay que agregar a mano: `presets: [require('./<carpeta>/tailwind-preset')]`.
+  - **`STANDALONE` — "Repo de design system reutilizable"**: la modalidad original, sin cambios.
+    La app crea (o actualiza vía PR) un repo propio con el scaffold completo — Storybook + React +
+    Tailwind + paquete compilado (ver FR-010) — pensado para instalarse vía
+    `npm install github:...` en uno o varios proyectos que lo necesiten como dependencia
+    compartida. El usuario la elige a propósito cuando ese es el caso de uso real, no por
+    default.
+  - Un mismo Design System puede tener a lo sumo un repo `STANDALONE` (igual que hoy), pero puede
+    tener múltiples exports `EMBEDDED` apuntando a repos distintos (un mismo design system
+    inyectado en varios proyectos puntuales).
 - **FR-008 — Vista de resultados "Foundations"**: la vista de preview de un design system
   generado debe presentar los tokens organizados como foundations de un design system real, no
   como una grilla plana:
@@ -57,10 +79,12 @@ preferencias de una marca, genera a partir de eso un design system (paleta de co
   La vista de preview (FR-008) muestra los 4 componentes nuevos antes de exportar, y el export
   a GitHub/Storybook (FR-007) los documenta con su propia story junto a la de Button.
 - **FR-010 — Repo exportado instalable como dependencia** *(nuevo por esta feature; corregido y
-  consolidado post-lanzamiento tras un incidente real — ver plan.md)*: el repo que genera FR-007
-  no debe ser solo un Storybook standalone — también debe poder consumirse como paquete desde otro
-  proyecto. Esta es la forma **oficial y única** de distribuirlo; no depende de ediciones manuales
-  en el repo exportado, que se pierden en la siguiente exportación.
+  consolidado post-lanzamiento tras un incidente real — ver plan.md)*: aplica únicamente al modo
+  `STANDALONE` de FR-007 (el modo `EMBEDDED` nunca genera un paquete instalable — sus archivos
+  pasan a ser código fuente propio del proyecto del usuario). El repo que genera el modo
+  `STANDALONE` no debe ser solo un Storybook standalone — también debe poder consumirse como
+  paquete desde otro proyecto. Esta es la forma **oficial y única** de distribuirlo; no depende de
+  ediciones manuales en el repo exportado, que se pierden en la siguiente exportación.
   - `npm install github:<owner>/<repo>` debe dejar los 5 componentes (Button, Input, Textarea,
     Alert, Badge) importables como named exports desde la raíz del paquete
     (`import { Button } from '<paquete>'`), y resolver correctamente con bundlers modernos

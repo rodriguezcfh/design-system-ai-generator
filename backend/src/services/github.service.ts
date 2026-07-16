@@ -9,7 +9,7 @@ import {
   type ComponentSources,
 } from '../lib/buildPackage'
 import { generatePRDescription, type AdditionalComponents } from './gemini.service'
-import { RepoConflictError } from '../lib/errors'
+import { RepoConflictError, GithubRepoNotFoundError, GithubRepoAccessDeniedError } from '../lib/errors'
 
 function toBase64(content: string): string {
   return Buffer.from(content, 'utf8').toString('base64')
@@ -269,4 +269,123 @@ export async function createUpdatePR(
   })
 
   return { prNumber: pr.number, prUrl: pr.html_url, branchName, prTitle, prBody }
+}
+
+// EMBEDDED mode: writes tokens + the 5 components as source files into a folder of the USER'S
+// OWN repo — no Storybook, no package.json, no dist/ bundle (the user's own bundler handles
+// these files like any other source in their project, same pattern as shadcn/ui). Deliberately
+// separate from scaffoldRepository/createUpdatePR above, which stay untouched for STANDALONE.
+export async function embedIntoRepository(
+  token: string,
+  targetRepoFullName: string,
+  targetPath: string,
+  colors: Record<string, string>,
+  typography: Record<string, unknown>,
+  colorScales: Record<string, unknown> | null,
+  typographyScale: unknown[] | null,
+  componentCode: string,
+  additionalComponents: AdditionalComponents,
+  dsName: string,
+): Promise<{
+  isInitialCommit: boolean
+  branchName: string | null
+  prNumber: number | null
+  prUrl: string | null
+  prTitle: string | null
+  prBody: string | null
+}> {
+  const octokit = new Octokit({ auth: token })
+  const [owner, repo] = targetRepoFullName.split('/')
+
+  let defaultBranch: string
+  try {
+    const { data } = await octokit.repos.get({ owner, repo })
+    if (data.permissions && data.permissions.push === false) {
+      throw new GithubRepoAccessDeniedError(targetRepoFullName)
+    }
+    defaultBranch = data.default_branch
+  } catch (err: unknown) {
+    if (err instanceof GithubRepoAccessDeniedError) throw err
+    if ((err as { status?: number }).status === 404) throw new GithubRepoNotFoundError(targetRepoFullName)
+    throw err
+  }
+
+  const sources = normalizeComponentSources({
+    Button: componentCode,
+    Input: additionalComponents.input,
+    Textarea: additionalComponents.textarea,
+    Alert: additionalComponents.alert,
+    Badge: additionalComponents.chip,
+  })
+
+  const files = [
+    { path: `${targetPath}/tokens/colors.json`, content: scaffold.buildColorsJson(colors) },
+    { path: `${targetPath}/tokens/typography.json`, content: scaffold.buildTypographyJson(typography) },
+    { path: `${targetPath}/tokens/colorScales.json`, content: scaffold.buildColorScalesJson(colorScales) },
+    { path: `${targetPath}/tokens/typographyScale.json`, content: scaffold.buildTypographyScaleJson(typographyScale) },
+    { path: `${targetPath}/tailwind-preset.js`, content: scaffold.buildTailwindPreset(colors, colorScales, typography) },
+    { path: `${targetPath}/components/Button.jsx`, content: sources.Button },
+    { path: `${targetPath}/components/Input.jsx`, content: sources.Input },
+    { path: `${targetPath}/components/Textarea.jsx`, content: sources.Textarea },
+    { path: `${targetPath}/components/Alert.jsx`, content: sources.Alert },
+    { path: `${targetPath}/components/Badge.jsx`, content: sources.Badge },
+    { path: `${targetPath}/INSTALL.md`, content: scaffold.buildInstallMd(targetPath) },
+  ]
+
+  let mainSha: string | null = null
+  try {
+    const { data: mainBranch } = await octokit.repos.getBranch({ owner, repo, branch: defaultBranch })
+    mainSha = mainBranch.commit.sha
+  } catch (err: unknown) {
+    if ((err as { status?: number }).status !== 404) throw err
+  }
+
+  if (!mainSha) {
+    for (const file of files) {
+      await octokit.repos.createOrUpdateFileContents({
+        owner,
+        repo,
+        path: file.path,
+        message: `chore: add design system to ${targetPath}/`,
+        content: toBase64(file.content),
+        branch: defaultBranch,
+      })
+    }
+    return { isInitialCommit: true, branchName: null, prNumber: null, prUrl: null, prTitle: null, prBody: null }
+  }
+
+  const branchName = `design-system-${Date.now()}`
+
+  await octokit.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: mainSha })
+
+  for (const file of files) {
+    let currentSha: string | undefined
+    try {
+      const { data: existing } = await octokit.repos.getContent({
+        owner, repo, path: file.path, ref: branchName,
+      })
+      if ('sha' in existing) currentSha = existing.sha
+    } catch { /* new file */ }
+
+    await octokit.repos.createOrUpdateFileContents({
+      owner, repo,
+      path: file.path,
+      message: `update: ${file.path}`,
+      content: toBase64(file.content),
+      branch: branchName,
+      ...(currentSha ? { sha: currentSha } : {}),
+    })
+  }
+
+  const { title: prTitle, body: prBody } = await generatePRDescription({
+    changedTokenKeys: Object.keys(colors),
+    hasComponentChanges: true,
+    dsName,
+  })
+
+  const { data: pr } = await octokit.pulls.create({
+    owner, repo, title: prTitle, body: prBody, head: branchName, base: defaultBranch,
+  })
+
+  return { isInitialCommit: false, branchName, prNumber: pr.number, prUrl: pr.html_url, prTitle, prBody }
 }

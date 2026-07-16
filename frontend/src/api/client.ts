@@ -127,6 +127,16 @@ export type Export = {
 
 export type Repository = { repoFullName: string }
 
+export type ExportMode = 'embedded' | 'standalone'
+
+export type ExportRequestOptions = {
+  mode?: ExportMode
+  repoName?: string
+  visibility?: 'public' | 'private'
+  targetRepoFullName?: string
+  targetPath?: string
+}
+
 export type DSDetail = {
   designSystem: DesignSystem & { tokens?: DesignTokens | null; repository?: Repository | null }
   conversation: { id: string; messages: ChatMessage[]; brief?: { isComplete: boolean } } | null
@@ -159,7 +169,7 @@ export const api = {
       apiFetch<{ tokens: DesignTokens; wcagReport: WcagReport }>(`/design-systems/${id}/generate`, {
         method: 'POST',
       }),
-    export: (id: string, repoName?: string, visibility?: 'public' | 'private') =>
+    export: (id: string, opts: ExportRequestOptions = {}) =>
       apiFetch<{
         type: 'initial' | 'update'
         repoUrl?: string; repoFullName?: string
@@ -167,8 +177,11 @@ export const api = {
         exportId: string
       }>(`/design-systems/${id}/export`, {
         method: 'POST', body: JSON.stringify({
-          repoName,
-          visibility: visibility?.toUpperCase() ?? 'PRIVATE',
+          mode: opts.mode?.toUpperCase(),
+          repoName: opts.repoName,
+          visibility: opts.visibility?.toUpperCase() ?? 'PRIVATE',
+          targetRepoFullName: opts.targetRepoFullName,
+          targetPath: opts.targetPath,
         }),
       }),
     exports: (id: string) => apiFetch<Export[]>(`/design-systems/${id}/exports`),

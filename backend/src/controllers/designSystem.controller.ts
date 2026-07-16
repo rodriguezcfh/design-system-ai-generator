@@ -62,9 +62,15 @@ export async function remove(req: Request, res: Response): Promise<void> {
 }
 
 const exportSchema = z.object({
+  mode: z.enum(['STANDALONE', 'EMBEDDED']).optional(),
   repoName: z.string().min(1).optional(),
   visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
-})
+  targetRepoFullName: z.string().min(1).optional(),
+  targetPath: z.string().min(1).optional(),
+}).refine(
+  (data) => data.mode !== 'EMBEDDED' || !!data.targetRepoFullName,
+  { message: 'targetRepoFullName is required when mode is EMBEDDED', path: ['targetRepoFullName'] },
+)
 
 export async function exportDS(req: Request, res: Response): Promise<void> {
   const parsed = exportSchema.safeParse(req.body)
@@ -90,6 +96,12 @@ export async function exportDS(req: Request, res: Response): Promise<void> {
       res.status(409).json({ error: err.message, suggestedName: err.suggestedName })
     } else if (err instanceof exportService.UnresolvableComponentExportError) {
       res.status(422).json({ error: err.message })
+    } else if (err instanceof exportService.MissingTargetRepoError) {
+      res.status(400).json({ error: err.message })
+    } else if (err instanceof exportService.GithubRepoNotFoundError) {
+      res.status(404).json({ error: err.message })
+    } else if (err instanceof exportService.GithubRepoAccessDeniedError) {
+      res.status(403).json({ error: err.message })
     } else {
       console.error('Error exporting design system:', err)
       res.status(500).json({ error: 'Internal server error' })

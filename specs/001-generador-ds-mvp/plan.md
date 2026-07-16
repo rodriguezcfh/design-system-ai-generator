@@ -237,3 +237,83 @@ cuenta de GitHub conectada por OAuth (consentimiento en navegador). Ninguna de l
 fabricar de forma segura fuera de una sesión real del usuario — así que esa verificación final
 (incluyendo re-exportar `prueba.3` para confirmar que el flujo pisa limpio el parche manual) la
 corre el usuario desde la app, no el agente.
+
+## Segundo modo de export: `EMBEDDED` ("agregar a mi proyecto")
+
+### Por qué dos modos, y por qué `EMBEDDED` es el default
+
+El modo original (ahora `STANDALONE`) resuelve un caso específico: un design system que se
+reutiliza como dependencia versionada entre varios proyectos. Pero el caso más común observado en
+uso real es más simple — alguien construyendo un único proyecto puntual (una landing, un sitio)
+que solo necesita los tokens y componentes *adentro* de ese proyecto, sin la sobrecarga de un
+segundo repo, un `package.json` propio, Storybook, o un paso de build con esbuild. Forzar siempre
+el camino `STANDALONE` para ese caso agrega fricción real: hay que crear/administrar un repo
+aparte y aprender a instalarlo como dependencia, para terminar usando los mismos 5 componentes que
+podrían vivir directo en el proyecto. `EMBEDDED` es la respuesta a eso — mismo patrón que
+shadcn/ui: los archivos se copian al proyecto del usuario y pasan a ser su código, no una
+dependencia versionada. Por resolver el caso más común, es el modo por default en el selector del
+frontend; `STANDALONE` sigue existiendo intacto para quien de verdad necesita un paquete
+reutilizable, elegido a propósito.
+
+### Qué NO se toca en modo `EMBEDDED`, y por qué
+
+- **Sin Storybook, sin `package.json`, sin `dist/` compilado.** Ninguno de estos tiene sentido
+  dentro de la carpeta de otro proyecto — el usuario ya tiene su propio bundler, su propio
+  `package.json`, y probablemente ya renderiza sus componentes con Vite/Next/CRA. Compilar un
+  `dist/` ahí sería redundante (el bundler del propio proyecto ya procesa JSX) y generaría
+  archivos derivados que quedarían obsoletos apenas alguien edite el componente a mano — cosa que
+  se espera que pase, porque estos archivos son del usuario ahora.
+- **Nunca se edita el `tailwind.config` del usuario.** El generador no conoce su formato (CJS vs
+  ESM, si ya tiene otros `presets`/`plugins`, si usa Tailwind v3 o v4) — una edición automática
+  mal hecha puede romper su build silenciosamente, y el usuario no tiene por qué confiar en que un
+  bot le va a tocar bien un archivo de configuración central de su proyecto. En cambio, el export
+  deja la única línea que hace falta agregar (`presets:
+  [require('./<targetPath>/tailwind-preset')]`) documentada en `INSTALL.md` y en el cuerpo del PR
+  — una acción explícita de una línea que el usuario revisa y aplica él mismo.
+- **Los componentes SÍ pasan por `normalizeComponentSources`** (la misma normalización de
+  `export default` → export nombrado que ya protege el modo `STANDALONE`), pero **no llevan el
+  banner de "generado, no editar"** que sí lleva `dist/*` en `STANDALONE` — es la distinción
+  clave entre los dos modos: en `EMBEDDED` estos archivos están pensados para ser editados a mano
+  desde el primer commit, son la entrega final, no un artefacto intermedio.
+
+### `embedIntoRepository` — commit inicial vs. rama + PR
+
+Mismo criterio que ya usa `createUpdatePR` para decidir static entre crear vs. actualizar, pero la
+pregunta que responde es distinta: no "¿ya existe un repo para este design system?" (eso lo
+decide `Repository.mode` en la base de datos), sino "¿el repo destino tiene commits?" — porque el
+repo es del usuario, pudo haber sido creado vacío recién (para este propósito) o ya tener su
+proyecto andando. Se detecta intentando `GET /repos/{owner}/{repo}/branches/{default_branch}`: un
+404 significa repo sin commits todavía, y la API de Contents (`PUT
+/repos/{owner}/{repo}/contents/{path}`) puede crear el primer commit de un repo vacío directo
+sobre la rama default sin necesitar un ref previo — eso resuelve el caso "recién creado" sin rama
+ni PR. Si la rama default ya existe, se sigue el mismo patrón de `createUpdatePR`: rama nueva +
+PR, pero escribiendo *solo* rutas bajo `targetPath/` — nunca se toca ni se lista ningún otro
+archivo del repo del usuario.
+
+Antes de escribir nada, se valida que el repo exista y que el token conectado tenga permiso de
+escritura (`GET /repos/{owner}/{repo}` y su campo `permissions.push`) — un repo inexistente o sin
+acceso de escritura tira un error tipado (`GithubRepoNotFoundError` /
+`GithubRepoAccessDeniedError`) antes de intentar ninguna escritura, no un 500 genérico a mitad de
+camino.
+
+### Modelo de datos: `Repository` deja de ser un repo único por Design System
+
+Un Design System puede tener a lo sumo un repo `STANDALONE` (invariante que ya existía), pero
+puede tener N repos `EMBEDDED` — un mismo design system inyectado en varios proyectos puntuales
+distintos. Esto rompe el supuesto original de "un `Repository` por `DesignSystem`"
+(`designSystemId @unique`). Se quita ese `@unique` y `Repository` gana `mode` (`STANDALONE` |
+`EMBEDDED`, default `STANDALONE`) y `targetPath` (solo aplica a `EMBEDDED`). La relación en
+`DesignSystem` pasa de `repository Repository?` (uno) a `repositories Repository[]` (varios).
+
+El invariante "a lo sumo un `STANDALONE` por Design System" ya no lo garantiza la base de datos —
+se sigue enforzando en código, igual que antes: `export.service.ts` busca un repo `STANDALONE`
+existente (`findFirst({ where: { designSystemId, mode: 'STANDALONE' } })`) antes de decidir si
+crea uno nuevo o actualiza el que ya existe. Para `EMBEDDED`, la búsqueda análoga filtra además
+por `repoFullName`, porque ahí sí puede haber más de una fila legítima por Design System — lo que
+se evita es crear una fila duplicada cada vez que se actualiza el *mismo* repo destino.
+
+El endpoint que devuelve el detalle de un Design System (`designSystem.service.ts`) sigue
+exponiendo `repository` (singular) en su respuesta — internamente ahora resuelve cuál de las
+`repositories` es la `STANDALONE`, para no romper el contrato que ya consume el frontend (el botón
+de "Desplegar en Vercel" solo tiene sentido para `STANDALONE`, `EMBEDDED` no tiene Storybook que
+desplegar).

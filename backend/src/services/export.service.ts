@@ -8,6 +8,9 @@ import {
   GithubNotConnectedError,
   RepoConflictError,
   UnresolvableComponentExportError,
+  GithubRepoNotFoundError,
+  GithubRepoAccessDeniedError,
+  MissingTargetRepoError,
 } from '../lib/errors'
 
 export {
@@ -17,6 +20,9 @@ export {
   GithubNotConnectedError,
   RepoConflictError,
   UnresolvableComponentExportError,
+  GithubRepoNotFoundError,
+  GithubRepoAccessDeniedError,
+  MissingTargetRepoError,
 }
 
 // Design systems generated before additionalComponents existed have it as null in the DB — fall
@@ -36,14 +42,98 @@ function withFallbacks(additionalComponents: AdditionalComponents | null): Addit
 }
 
 type ExportOptions = {
+  mode?: 'STANDALONE' | 'EMBEDDED'
   repoName?: string
   visibility?: 'PUBLIC' | 'PRIVATE'
+  targetRepoFullName?: string
+  targetPath?: string
 }
 
 export async function exportDesignSystem(
   userId: string,
   designSystemId: string,
   opts: ExportOptions = {},
+) {
+  if (opts.mode === 'EMBEDDED') return embedDesignSystem(userId, designSystemId, opts)
+  return exportStandalone(userId, designSystemId, opts)
+}
+
+// EMBEDDED — writes tokens + the 5 components into a folder of the user's OWN repo (no
+// Storybook, no package.json, no dist/*). See github.service.ts's embedIntoRepository.
+async function embedDesignSystem(
+  userId: string,
+  designSystemId: string,
+  opts: ExportOptions,
+) {
+  if (!opts.targetRepoFullName) throw new MissingTargetRepoError()
+
+  const ds = await prisma.designSystem.findFirst({ where: { id: designSystemId, userId } })
+  if (!ds) throw new NotFoundError('Design system not found')
+
+  const tokens = await prisma.designTokens.findUnique({ where: { designSystemId } })
+  if (!tokens) throw new TokensNotReadyError()
+  if (!tokens.wcagValid) throw new WcagFailedError()
+
+  const githubAuth = await githubService.getDecryptedToken(userId)
+  if (!githubAuth) throw new GithubNotConnectedError()
+
+  const colors = tokens.colors as Record<string, string>
+  const typography = tokens.typography as Record<string, unknown>
+  const colorScales = tokens.colorScales as Record<string, unknown> | null
+  const typographyScale = tokens.typographyScale as unknown[] | null
+  const componentCode = tokens.componentCode ?? ''
+  const additionalComponents = withFallbacks(tokens.additionalComponents as AdditionalComponents | null)
+  const targetPath = opts.targetPath?.trim() || 'design-system'
+  const targetRepoFullName = opts.targetRepoFullName
+
+  const result = await githubService.embedIntoRepository(
+    githubAuth.token, targetRepoFullName, targetPath, colors, typography, colorScales,
+    typographyScale, componentCode, additionalComponents, ds.name,
+  )
+
+  const existingEmbed = await prisma.repository.findFirst({
+    where: { designSystemId, repoFullName: targetRepoFullName, mode: 'EMBEDDED' },
+  })
+  const [, exportRecord] = await Promise.all([
+    existingEmbed
+      ? Promise.resolve(existingEmbed)
+      : prisma.repository.create({
+        data: { designSystemId, repoFullName: targetRepoFullName, mode: 'EMBEDDED', targetPath },
+      }),
+    prisma.export.create({
+      data: {
+        designSystemId,
+        type: result.isInitialCommit ? 'INITIAL' : 'UPDATE',
+        branchName: result.branchName,
+        prNumber: result.prNumber,
+        prUrl: result.prUrl,
+        prTitle: result.prTitle,
+        prBody: result.prBody,
+        status: result.prNumber ? 'OPEN' : null,
+      },
+    }),
+  ])
+
+  await prisma.designSystem.update({ where: { id: designSystemId }, data: { status: 'EXPORTED' } })
+
+  return {
+    type: result.isInitialCommit ? ('initial' as const) : ('update' as const),
+    repoFullName: targetRepoFullName,
+    repoUrl: `https://github.com/${targetRepoFullName}`,
+    prUrl: result.prUrl ?? undefined,
+    prNumber: result.prNumber ?? undefined,
+    branchName: result.branchName ?? undefined,
+    exportId: exportRecord.id,
+  }
+}
+
+// STANDALONE — the original flow, unchanged in behavior: a repo of its own with the full
+// Storybook + installable-package scaffold. At most one per design system (enforced here, since
+// Repository.designSystemId is no longer @unique — see plan.md).
+async function exportStandalone(
+  userId: string,
+  designSystemId: string,
+  opts: ExportOptions,
 ) {
   const ds = await prisma.designSystem.findFirst({ where: { id: designSystemId, userId } })
   if (!ds) throw new NotFoundError('Design system not found')
@@ -55,7 +145,7 @@ export async function exportDesignSystem(
   const githubAuth = await githubService.getDecryptedToken(userId)
   if (!githubAuth) throw new GithubNotConnectedError()
 
-  const existingRepo = await prisma.repository.findUnique({ where: { designSystemId } })
+  const existingRepo = await prisma.repository.findFirst({ where: { designSystemId, mode: 'STANDALONE' } })
   const colors = tokens.colors as Record<string, string>
   const typography = tokens.typography as Record<string, unknown>
   const colorScales = tokens.colorScales as Record<string, unknown> | null
@@ -76,7 +166,7 @@ export async function exportDesignSystem(
 
     const [repo, exportRecord] = await Promise.all([
       prisma.repository.create({
-        data: { designSystemId, repoFullName: fullName, visibility: opts.visibility ?? 'PRIVATE' },
+        data: { designSystemId, repoFullName: fullName, mode: 'STANDALONE', visibility: opts.visibility ?? 'PRIVATE' },
       }),
       prisma.export.create({ data: { designSystemId, type: 'INITIAL' } }),
     ])

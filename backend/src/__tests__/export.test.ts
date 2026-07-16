@@ -9,7 +9,7 @@ vi.mock('../lib/prisma', () => ({
   default: {
     designSystem: { findFirst: vi.fn(), update: vi.fn() },
     designTokens: { findUnique: vi.fn() },
-    repository: { findUnique: vi.fn(), create: vi.fn() },
+    repository: { findFirst: vi.fn(), create: vi.fn() },
     export: { create: vi.fn(), findMany: vi.fn() },
     githubConnection: { findUnique: vi.fn() },
   },
@@ -22,6 +22,7 @@ vi.mock('../services/github.service', () => ({
   createRepository: vi.fn(),
   scaffoldRepository: vi.fn(),
   createUpdatePR: vi.fn(),
+  embedIntoRepository: vi.fn(),
 }))
 
 const validToken = signToken({ userId: 'user-1' })
@@ -47,7 +48,7 @@ const fakeTokens = {
 }
 const fakeRepo = {
   id: 'repo-1', designSystemId: 'ds-1', repoFullName: 'octocat/mi-brand-design-system',
-  visibility: 'PRIVATE', createdAt: new Date(),
+  mode: 'STANDALONE', targetPath: null, visibility: 'PRIVATE', createdAt: new Date(),
 }
 const fakeExport = {
   id: 'exp-1', designSystemId: 'ds-1', type: 'INITIAL',
@@ -61,7 +62,7 @@ describe('POST /api/design-systems/:id/export', () => {
   it('initial export — creates repo and returns repoUrl', async () => {
     vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
     vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
-    vi.mocked(prisma.repository.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.repository.findFirst).mockResolvedValue(null)
     vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
     vi.mocked(githubService.createRepository).mockResolvedValue({ fullName: 'octocat/mi-brand-design-system' })
     vi.mocked(githubService.scaffoldRepository).mockResolvedValue(undefined)
@@ -87,7 +88,7 @@ describe('POST /api/design-systems/:id/export', () => {
   it('falls back to placeholder components when additionalComponents is null (design system generated before this feature)', async () => {
     vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
     vi.mocked(prisma.designTokens.findUnique).mockResolvedValue({ ...fakeTokens, additionalComponents: null })
-    vi.mocked(prisma.repository.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.repository.findFirst).mockResolvedValue(null)
     vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
     vi.mocked(githubService.createRepository).mockResolvedValue({ fullName: 'octocat/mi-brand-design-system' })
     vi.mocked(githubService.scaffoldRepository).mockResolvedValue(undefined)
@@ -111,7 +112,7 @@ describe('POST /api/design-systems/:id/export', () => {
   it('update export — creates branch + PR and returns prUrl', async () => {
     vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
     vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
-    vi.mocked(prisma.repository.findUnique).mockResolvedValue(fakeRepo)
+    vi.mocked(prisma.repository.findFirst).mockResolvedValue(fakeRepo)
     vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
     vi.mocked(githubService.createUpdatePR).mockResolvedValue({
       prNumber: 3,
@@ -145,7 +146,7 @@ describe('POST /api/design-systems/:id/export', () => {
   it('returns 403 if GitHub not connected', async () => {
     vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
     vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
-    vi.mocked(prisma.repository.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.repository.findFirst).mockResolvedValue(null)
     vi.mocked(githubService.getDecryptedToken).mockResolvedValue(null)
 
     const res = await request(app)
@@ -185,7 +186,7 @@ describe('POST /api/design-systems/:id/export', () => {
     const { RepoConflictError } = await import('../lib/errors')
     vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
     vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
-    vi.mocked(prisma.repository.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.repository.findFirst).mockResolvedValue(null)
     vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
     vi.mocked(githubService.createRepository).mockRejectedValue(new RepoConflictError('mi-brand-design-system-2'))
 
@@ -212,6 +213,139 @@ describe('POST /api/design-systems/:id/export', () => {
   it('returns 401 with no token', async () => {
     const res = await request(app).post('/api/design-systems/ds-1/export').send({})
     expect(res.status).toBe(401)
+  })
+})
+
+describe('POST /api/design-systems/:id/export — EMBEDDED mode', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const fakeEmbedRepo = {
+    id: 'repo-embed-1', designSystemId: 'ds-1', repoFullName: 'octocat/mi-landing',
+    mode: 'EMBEDDED', targetPath: 'design-system', visibility: 'PRIVATE', createdAt: new Date(),
+  }
+  const fakeInitialCommitResult = {
+    isInitialCommit: true, branchName: null, prNumber: null, prUrl: null, prTitle: null, prBody: null,
+  }
+
+  it('embeds into an empty target repo — initial commit, no PR', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
+    vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
+    vi.mocked(githubService.embedIntoRepository).mockResolvedValue(fakeInitialCommitResult)
+    vi.mocked(prisma.repository.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.repository.create).mockResolvedValue(fakeEmbedRepo)
+    vi.mocked(prisma.export.create).mockResolvedValue({
+      ...fakeExport, id: 'exp-embed-1', type: 'INITIAL', status: null,
+    })
+    vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'EXPORTED' })
+
+    const res = await request(app)
+      .post('/api/design-systems/ds-1/export')
+      .set(auth)
+      .send({ mode: 'EMBEDDED', targetRepoFullName: 'octocat/mi-landing', targetPath: 'design-system' })
+
+    expect(res.status).toBe(201)
+    expect(res.body.type).toBe('initial')
+    expect(res.body.repoUrl).toBe('https://github.com/octocat/mi-landing')
+    expect(githubService.embedIntoRepository).toHaveBeenCalledWith(
+      'ghs_abc', 'octocat/mi-landing', 'design-system',
+      fakeTokens.colors, fakeTokens.typography, undefined, undefined,
+      fakeTokens.componentCode, fakeAdditionalComponents, fakeDS.name,
+    )
+    expect(githubService.scaffoldRepository).not.toHaveBeenCalled()
+  })
+
+  it('defaults targetPath to "design-system" when not provided', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
+    vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
+    vi.mocked(githubService.embedIntoRepository).mockResolvedValue(fakeInitialCommitResult)
+    vi.mocked(prisma.repository.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.repository.create).mockResolvedValue(fakeEmbedRepo)
+    vi.mocked(prisma.export.create).mockResolvedValue({ ...fakeExport, type: 'INITIAL' })
+    vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'EXPORTED' })
+
+    await request(app)
+      .post('/api/design-systems/ds-1/export')
+      .set(auth)
+      .send({ mode: 'EMBEDDED', targetRepoFullName: 'octocat/mi-landing' })
+
+    const call = vi.mocked(githubService.embedIntoRepository).mock.calls[0]
+    expect(call[0]).toBe('ghs_abc')
+    expect(call[1]).toBe('octocat/mi-landing')
+    expect(call[2]).toBe('design-system')
+  })
+
+  it('embeds into a non-empty target repo — returns the PR url', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
+    vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
+    vi.mocked(githubService.embedIntoRepository).mockResolvedValue({
+      isInitialCommit: false, branchName: 'design-system-123', prNumber: 9,
+      prUrl: 'https://github.com/octocat/mi-landing/pull/9',
+      prTitle: 'Update design system', prBody: 'What changed...',
+    })
+    vi.mocked(prisma.repository.findFirst).mockResolvedValue(fakeEmbedRepo)
+    vi.mocked(prisma.export.create).mockResolvedValue({
+      ...fakeExport, id: 'exp-embed-2', type: 'UPDATE', prNumber: 9,
+      prUrl: 'https://github.com/octocat/mi-landing/pull/9', status: 'OPEN',
+    })
+    vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'EXPORTED' })
+
+    const res = await request(app)
+      .post('/api/design-systems/ds-1/export')
+      .set(auth)
+      .send({ mode: 'EMBEDDED', targetRepoFullName: 'octocat/mi-landing' })
+
+    expect(res.status).toBe(201)
+    expect(res.body.type).toBe('update')
+    expect(res.body.prUrl).toContain('pull/9')
+    // an existing EMBEDDED repo row for the same target isn't duplicated
+    expect(prisma.repository.create).not.toHaveBeenCalled()
+  })
+
+  it('returns 400 when targetRepoFullName is missing', async () => {
+    const res = await request(app)
+      .post('/api/design-systems/ds-1/export')
+      .set(auth)
+      .send({ mode: 'EMBEDDED' })
+
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 404 (typed error, not a generic 500) when the target repo does not exist', async () => {
+    const { GithubRepoNotFoundError } = await import('../lib/errors')
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
+    vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
+    vi.mocked(githubService.embedIntoRepository).mockRejectedValue(
+      new GithubRepoNotFoundError('octocat/does-not-exist'),
+    )
+
+    const res = await request(app)
+      .post('/api/design-systems/ds-1/export')
+      .set(auth)
+      .send({ mode: 'EMBEDDED', targetRepoFullName: 'octocat/does-not-exist' })
+
+    expect(res.status).toBe(404)
+    expect(res.body.error).toContain('does-not-exist')
+  })
+
+  it('returns 403 (typed error, not a generic 500) when the connected account cannot push to the target repo', async () => {
+    const { GithubRepoAccessDeniedError } = await import('../lib/errors')
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.designTokens.findUnique).mockResolvedValue(fakeTokens)
+    vi.mocked(githubService.getDecryptedToken).mockResolvedValue({ token: 'ghs_abc', login: 'octocat' })
+    vi.mocked(githubService.embedIntoRepository).mockRejectedValue(
+      new GithubRepoAccessDeniedError('octocat/someone-elses-repo'),
+    )
+
+    const res = await request(app)
+      .post('/api/design-systems/ds-1/export')
+      .set(auth)
+      .send({ mode: 'EMBEDDED', targetRepoFullName: 'octocat/someone-elses-repo' })
+
+    expect(res.status).toBe(403)
   })
 })
 
