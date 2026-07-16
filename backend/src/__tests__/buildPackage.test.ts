@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { buildComponentBundles, buildComponentCss, normalizeComponentExport } from '../lib/buildPackage'
+import {
+  buildComponentBundles, buildComponentCss, normalizeComponentExport, normalizeComponentSources,
+} from '../lib/buildPackage'
 import { computeTailwindThemeExtend } from '../lib/scaffold'
 import { UnresolvableComponentExportError } from '../lib/errors'
 
@@ -144,5 +146,32 @@ describe('normalizeComponentExport', () => {
 
     await expect(buildComponentBundles(brokenSources)).rejects.toThrow(UnresolvableComponentExportError)
     await expect(buildComponentBundles(brokenSources)).rejects.toThrow(/^Input:/)
+  })
+})
+
+describe('normalizeComponentSources', () => {
+  // Regression test for a real Vercel Storybook build failure: Alert.jsx saved with
+  // `export default Alert`, while the hand-authored Alert.stories.jsx does a static
+  // `import { Alert } from './Alert'` — Rollup failed with
+  // `"Alert" is not exported by "src/components/Alert.jsx"`. The normalized source is
+  // what github.service.ts now writes to src/components/Alert.jsx, so this asserts the
+  // exact text a story's named import needs to resolve.
+  it('rewrites an export-default Alert into something a static `import { Alert } from \'./Alert\'` resolves', () => {
+    const rawSources = {
+      ...sources,
+      Alert: `function Alert({ variant = 'success', title, children }) {
+        return <div role="alert"><strong>{title}</strong>{children}</div>
+      }
+      export default Alert`,
+    }
+
+    const normalized = normalizeComponentSources(rawSources)
+
+    expect(normalized.Alert).not.toMatch(/export\s+default/)
+    expect(normalized.Alert).toMatch(/export\s*\{\s*Alert\s*\}/)
+  })
+
+  it('leaves already-correct sources byte-for-byte unchanged', () => {
+    expect(normalizeComponentSources(sources)).toEqual(sources)
   })
 })

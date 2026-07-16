@@ -2,7 +2,12 @@ import { Octokit } from '@octokit/rest'
 import prisma from '../lib/prisma'
 import { encrypt, decrypt } from '../lib/crypto'
 import * as scaffold from '../lib/scaffold'
-import { buildComponentBundles, buildComponentCss, type ComponentSources } from '../lib/buildPackage'
+import {
+  buildComponentBundles,
+  buildComponentCss,
+  normalizeComponentSources,
+  type ComponentSources,
+} from '../lib/buildPackage'
 import { generatePRDescription, type AdditionalComponents } from './gemini.service'
 import { RepoConflictError } from '../lib/errors'
 
@@ -10,20 +15,25 @@ function toBase64(content: string): string {
   return Buffer.from(content, 'utf8').toString('base64')
 }
 
+// Normalizes each component's export shape ONCE and reuses that exact text for both the raw
+// src/components/*.jsx (which the hand-authored *.stories.jsx statically import as named
+// exports — Storybook/Rollup builds fail otherwise) and the dist/* bundle, so the two never
+// disagree about what a component actually exports.
 async function buildDistFiles(
   colors: Record<string, string>,
   colorScales: Record<string, unknown> | null,
   typography: Record<string, unknown>,
   componentCode: string,
   additionalComponents: AdditionalComponents,
-): Promise<{ cjs: string; esm: string; css: string }> {
-  const sources: ComponentSources = {
+): Promise<{ cjs: string; esm: string; css: string; sources: ComponentSources }> {
+  const rawSources: ComponentSources = {
     Button: componentCode,
     Input: additionalComponents.input,
     Textarea: additionalComponents.textarea,
     Alert: additionalComponents.alert,
     Badge: additionalComponents.chip,
   }
+  const sources = normalizeComponentSources(rawSources)
   const themeExtend = scaffold.computeTailwindThemeExtend(colors, colorScales, typography)
 
   const [{ cjs, esm }, css] = await Promise.all([
@@ -31,7 +41,7 @@ async function buildDistFiles(
     buildComponentCss(sources, themeExtend),
   ])
 
-  return { cjs, esm, css }
+  return { cjs, esm, css, sources }
 }
 
 // ─── OAuth ───────────────────────────────────────────────────────────────────
@@ -130,7 +140,7 @@ export async function scaffoldRepository(
   const octokit = new Octokit({ auth: token })
   const [owner, repo] = fullName.split('/')
 
-  const { cjs, esm, css } = await buildDistFiles(colors, colorScales, typography, componentCode, additionalComponents)
+  const { cjs, esm, css, sources } = await buildDistFiles(colors, colorScales, typography, componentCode, additionalComponents)
 
   const files: { path: string; content: string }[] = [
     { path: 'package.json', content: scaffold.buildPackageJson(repoName) },
@@ -151,15 +161,15 @@ export async function scaffoldRepository(
     { path: 'dist/index.esm.js', content: esm },
     { path: 'dist/index.css', content: css },
     { path: 'README.md', content: scaffold.buildReadme(repoName) },
-    { path: 'src/components/Button.jsx', content: componentCode },
+    { path: 'src/components/Button.jsx', content: sources.Button },
     { path: 'src/components/Button.stories.jsx', content: scaffold.buildButtonStories() },
-    { path: 'src/components/Input.jsx', content: additionalComponents.input },
+    { path: 'src/components/Input.jsx', content: sources.Input },
     { path: 'src/components/Input.stories.jsx', content: scaffold.buildInputStories() },
-    { path: 'src/components/Alert.jsx', content: additionalComponents.alert },
+    { path: 'src/components/Alert.jsx', content: sources.Alert },
     { path: 'src/components/Alert.stories.jsx', content: scaffold.buildAlertStories() },
-    { path: 'src/components/Textarea.jsx', content: additionalComponents.textarea },
+    { path: 'src/components/Textarea.jsx', content: sources.Textarea },
     { path: 'src/components/Textarea.stories.jsx', content: scaffold.buildTextareaStories() },
-    { path: 'src/components/Badge.jsx', content: additionalComponents.chip },
+    { path: 'src/components/Badge.jsx', content: sources.Badge },
     { path: 'src/components/Badge.stories.jsx', content: scaffold.buildBadgeStories() },
     { path: 'src/foundations/Foundations.stories.jsx', content: scaffold.buildFoundationsStory() },
   ]
@@ -201,7 +211,7 @@ export async function createUpdatePR(
 
   await octokit.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: mainSha })
 
-  const { cjs, esm, css } = await buildDistFiles(colors, colorScales, typography, componentCode, additionalComponents)
+  const { cjs, esm, css, sources } = await buildDistFiles(colors, colorScales, typography, componentCode, additionalComponents)
 
   const filesToUpdate = [
     { path: 'package.json', content: scaffold.buildPackageJson(repo) },
@@ -217,14 +227,14 @@ export async function createUpdatePR(
     { path: 'dist/index.esm.js', content: esm },
     { path: 'dist/index.css', content: css },
     { path: 'README.md', content: scaffold.buildReadme(repo) },
-    { path: 'src/components/Button.jsx', content: componentCode },
-    { path: 'src/components/Input.jsx', content: additionalComponents.input },
+    { path: 'src/components/Button.jsx', content: sources.Button },
+    { path: 'src/components/Input.jsx', content: sources.Input },
     { path: 'src/components/Input.stories.jsx', content: scaffold.buildInputStories() },
-    { path: 'src/components/Alert.jsx', content: additionalComponents.alert },
+    { path: 'src/components/Alert.jsx', content: sources.Alert },
     { path: 'src/components/Alert.stories.jsx', content: scaffold.buildAlertStories() },
-    { path: 'src/components/Textarea.jsx', content: additionalComponents.textarea },
+    { path: 'src/components/Textarea.jsx', content: sources.Textarea },
     { path: 'src/components/Textarea.stories.jsx', content: scaffold.buildTextareaStories() },
-    { path: 'src/components/Badge.jsx', content: additionalComponents.chip },
+    { path: 'src/components/Badge.jsx', content: sources.Badge },
     { path: 'src/components/Badge.stories.jsx', content: scaffold.buildBadgeStories() },
     { path: 'src/foundations/Foundations.stories.jsx', content: scaffold.buildFoundationsStory() },
   ]

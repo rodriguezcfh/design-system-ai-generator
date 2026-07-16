@@ -74,7 +74,11 @@ export function normalizeComponentExport(expectedName: string, code: string): st
   return code
 }
 
-function normalizeAllSources(sources: ComponentSources): ComponentSources {
+// Normalizes all 5 components once so the exact same code text is used everywhere it matters:
+// the committed src/components/*.jsx (which the hand-authored *.stories.jsx statically import
+// as named exports) and the dist/* bundle (built from these same sources). Throws before either
+// ever gets written if a component still has no resolvable named export after normalization.
+export function normalizeComponentSources(sources: ComponentSources): ComponentSources {
   const normalized = {} as ComponentSources
   for (const name of COMPONENT_NAMES) {
     const code = normalizeComponentExport(name, sources[name])
@@ -107,7 +111,8 @@ function virtualComponentsPlugin(sources: ComponentSources): esbuild.Plugin {
 // duplicate-React "Invalid hook call" issues). Produced once at export time and
 // committed as dist/*, because a git-installed package never runs a build step.
 export async function buildComponentBundles(sources: ComponentSources): Promise<{ cjs: string; esm: string }> {
-  const normalizedSources = normalizeAllSources(sources)
+  // Idempotent if `sources` was already normalized by the caller (hasNamedExport short-circuits).
+  const normalizedSources = normalizeComponentSources(sources)
   const shared = {
     entryPoints: ['virtual:index'],
     bundle: true,
