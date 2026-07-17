@@ -29,6 +29,19 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       res.status(404).json({ error: err.message })
       return
     }
+    if (err instanceof chatService.TokensNotReadyError) {
+      res.status(422).json({ error: err.message })
+      return
+    }
+    if (
+      err instanceof chatService.InvalidComponentCodeError ||
+      err instanceof chatService.DisallowedImportError ||
+      err instanceof chatService.PatchExportContractError
+    ) {
+      console.error('Chat-driven edit produced invalid component code:', (err as Error).message)
+      res.status(422).json({ error: (err as Error).message })
+      return
+    }
     console.error('Error sending chat message:', err)
     res.status(500).json({ error: 'Internal server error' })
   }

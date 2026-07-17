@@ -20,6 +20,7 @@ export async function generateForDesignSystem(userId: string, designSystemId: st
     values: brief.values as string[],
     references: brief.references as string[],
     preferredColors: brief.preferredColors as string[] | null,
+    preferredFontMode: brief.preferredFontMode,
     preferredHeadingFont: brief.preferredHeadingFont,
     preferredBodyFont: brief.preferredBodyFont,
   })
@@ -66,7 +67,8 @@ export async function generateForDesignSystem(userId: string, designSystemId: st
 
   await prisma.designSystem.update({
     where: { id: designSystemId },
-    data: { status: 'GENERATED' },
+    // A full regeneration invalidates any chat-proposed edit still awaiting confirmation.
+    data: { status: 'GENERATED', pendingEditSummary: null, pendingEditPatch: Prisma.JsonNull },
   })
 
   return { tokens, wcagReport }

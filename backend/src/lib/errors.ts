@@ -103,3 +103,13 @@ export class MissingTargetRepoError extends Error {
     this.name = 'MissingTargetRepoError'
   }
 }
+
+export class PatchExportContractError extends Error {
+  constructor(componentName: string) {
+    super(
+      `${componentName}: the edit broke this component's expected named export ("${componentName}"). ` +
+      `The change was not applied — try rephrasing the request.`,
+    )
+    this.name = 'PatchExportContractError'
+  }
+}

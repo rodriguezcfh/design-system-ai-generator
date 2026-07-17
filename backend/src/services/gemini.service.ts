@@ -10,6 +10,14 @@ Si el usuario menciona colores hexadecimales concretos (ej. "#0077B6") o nombres
 concretos (ej. "Kiona para títulos", "Montserrat para textos"), capturalos LITERALMENTE — no los
 reinterpretes, no los traduzcas a otro color/fuente ni los completes con opciones que no dijo.
 
+Sobre tipografía específicamente: si el usuario pide EXPLÍCITAMENTE dos tipografías distintas
+(una para títulos, otra para texto), marcá preferredFontMode como "SEPARATE" y completá
+preferredHeadingFont/preferredBodyFont con cada una (aunque solo haya dado una de las dos todavía,
+"SEPARATE" indica que están en dos campos separados, no que ya estén completos). Si pide
+EXPLÍCITAMENTE una sola tipografía para todo el sistema, marcá preferredFontMode como "SINGLE" y
+guardá esa fuente en preferredHeadingFont, dejando preferredBodyFont en null. Si todavía no dijo
+nada sobre tipografía, dejá preferredFontMode como "UNSET".
+
 Respondé siempre con JSON válido en este formato exacto (sin markdown, sin texto adicional):
 {
   "assistantMessage": "Tu respuesta conversacional en español",
@@ -18,8 +26,9 @@ Respondé siempre con JSON válido en este formato exacto (sin markdown, sin tex
     "values": ["valor de marca 1", "valor de marca 2"],
     "references": ["referencia o inspiración mencionada"],
     "preferredColors": ["#hex1", "#hex2"] o null si no mencionó colores concretos,
-    "preferredHeadingFont": "nombre de fuente para títulos o null si no mencionó ninguna",
-    "preferredBodyFont": "nombre de fuente para texto de cuerpo o null si no mencionó ninguna",
+    "preferredFontMode": "UNSET" | "SINGLE" | "SEPARATE",
+    "preferredHeadingFont": "nombre de fuente para títulos, o la única fuente si preferredFontMode es SINGLE, o null",
+    "preferredBodyFont": "nombre de fuente para texto de cuerpo o null (siempre null si preferredFontMode es SINGLE)",
     "isComplete": false
   }
 }
@@ -38,6 +47,7 @@ export type BriefExtraction = {
     values: string[]
     references: string[]
     preferredColors: string[] | null
+    preferredFontMode: 'UNSET' | 'SINGLE' | 'SEPARATE'
     preferredHeadingFont: string | null
     preferredBodyFont: string | null
     isComplete: boolean
@@ -66,6 +76,33 @@ export async function extractBrief(messages: ChatMessage[]): Promise<BriefExtrac
 }
 
 // ─── Design System Generation ───────────────────────────────────────────────
+
+// Shared between GENERATION_INSTRUCTION (full generation) and EDIT_INSTRUCTION (chat-driven
+// edits to an existing design system) — both produce/patch the same 5 component code strings,
+// under the same hard constraints.
+const COMPONENT_CODE_CONSTRAINTS = `CRITICAL: every component's code must be plain JavaScript + JSX
+— each will be saved as its own .jsx file and parsed by Storybook/Babel's JSX-only parser, which
+cannot handle TypeScript syntax. This means:
+- NO generics anywhere (no "forwardRef<HTMLButtonElement, ButtonProps>", no "useState<...>").
+- NO "interface" or "type X = ..." declarations.
+- NO type annotations on parameters, variables, or return types (no ": string", ": ButtonProps",
+  "): JSX.Element", no "React.FC<...>").
+- NO "as" type assertions (no "as const", "as unknown", "as SomeType").
+- NO enums.
+If you want to document props, use JSDoc comments — never TypeScript.
+
+CRITICAL: no component may import ANY npm package other than "react" — no
+class-variance-authority, tailwind-merge, clsx, prop-types, @radix-ui/*, or anything else. The
+exported repo's package.json only declares react/react-dom as dependencies, so any other import
+is unresolvable and fails the ENTIRE Storybook build, not just that one component. Implement
+className merging with a small inline helper function (e.g. a local cn(...classes) that filters
+and joins strings) and variant/size lookup with plain object literals — do not reach for a
+runtime prop validation library either, a plain JSDoc comment is enough.
+
+CRITICAL: every component must keep exporting exactly the same name it already has (Button,
+Input, Textarea, Alert, Badge) as a named export (e.g. "export { Button }" or "export function
+Button(...)") — never switch to a default export or rename the export, other code statically
+imports these components by that exact name.`
 
 const GENERATION_INSTRUCTION = `You are a design system generator. Given a brand brief, produce a complete set of
 design tokens, a typographic scale, and a React + Tailwind CSS Button component.
@@ -125,9 +162,15 @@ in every component — never hardcoded hex values.
 
 If the brief includes explicit preferred colors, use those EXACT hex values verbatim for
 primary/secondary (do not invent alternatives) and design the rest of the palette (neutrals,
-success/warning/error, surfaces) to complement them while still passing WCAG AA. If the brief
-includes explicit preferred fonts for headings and/or body text, use those EXACT font names
-verbatim as fontFamilyDisplay/fontFamily — do not substitute a different font.
+success/warning/error, surfaces) to complement them while still passing WCAG AA.
+
+Font handling depends on preferredFontMode: "SINGLE" means the brief wants ONE font for the whole
+system — use preferredHeadingFont verbatim as BOTH fontFamilyDisplay and fontFamily (identical
+values, do not force a second font). "SEPARATE" means two distinct fonts — use
+preferredHeadingFont verbatim as fontFamilyDisplay and preferredBodyFont verbatim as fontFamily
+(if only one of the two is given, use that same one for both, since a second font hasn't been
+decided yet). "UNSET" means no font preference was stated — choose fonts freely that fit the
+brand tone.
 
 The buttonComponent must export a Button with variants (primary, secondary, ghost),
 sizes (sm, md, lg), and states (default, hover, active, disabled, focus-visible).
@@ -152,24 +195,8 @@ exact prop names, so any deviation breaks the story:
   matching color tokens (variant="default" uses "muted"/"mutedForeground"). Renders as a small
   rounded-full pill.
 
-CRITICAL: every one of these 5 components (buttonComponent + the 4 in additionalComponents) must
-be plain JavaScript + JSX — each will be saved as its own .jsx file and parsed by
-Storybook/Babel's JSX-only parser, which cannot handle TypeScript syntax. This means, for ALL 5:
-- NO generics anywhere (no "forwardRef<HTMLButtonElement, ButtonProps>", no "useState<...>").
-- NO "interface" or "type X = ..." declarations.
-- NO type annotations on parameters, variables, or return types (no ": string", ": ButtonProps",
-  "): JSX.Element", no "React.FC<...>").
-- NO "as" type assertions (no "as const", "as unknown", "as SomeType").
-- NO enums.
-If you want to document props, use JSDoc comments — never TypeScript.
-
-CRITICAL: none of these 5 components may import ANY npm package other than "react" — no
-class-variance-authority, tailwind-merge, clsx, prop-types, @radix-ui/*, or anything else. The
-exported repo's package.json only declares react/react-dom as dependencies, so any other import
-is unresolvable and fails the ENTIRE Storybook build, not just that one component. Implement
-className merging with a small inline helper function (e.g. a local cn(...classes) that filters
-and joins strings) and variant/size lookup with plain object literals — do not reach for a
-runtime prop validation library either, a plain JSDoc comment is enough.
+${COMPONENT_CODE_CONSTRAINTS}
+(applies to all 5: buttonComponent + the 4 in additionalComponents)
 
 typographyScale must be ordered from largest to smallest and cover at least Display, Heading 1-4,
 and Body.`
@@ -204,6 +231,7 @@ type BriefInput = {
   values: string[]
   references: string[]
   preferredColors?: string[] | null
+  preferredFontMode?: 'UNSET' | 'SINGLE' | 'SEPARATE'
   preferredHeadingFont?: string | null
   preferredBodyFont?: string | null
 }
@@ -244,6 +272,7 @@ export async function generateDesignSystem(brief: BriefInput): Promise<Generated
 - Values: ${brief.values.length ? brief.values.join(', ') : 'not specified'}
 - References / inspirations: ${brief.references.length ? brief.references.join(', ') : 'none'}
 - Preferred colors (use verbatim if present): ${brief.preferredColors?.length ? brief.preferredColors.join(', ') : 'none specified'}
+- preferredFontMode: ${brief.preferredFontMode ?? 'UNSET'}
 - Preferred heading font (use verbatim if present): ${brief.preferredHeadingFont ?? 'none specified'}
 - Preferred body font (use verbatim if present): ${brief.preferredBodyFont ?? 'none specified'}
 
@@ -252,4 +281,140 @@ additionalComponents (input, alert, textarea, chip) per their fixed contracts.`
 
   const result = await model.generateContent(prompt)
   return JSON.parse(result.response.text()) as GeneratedDesignSystem
+}
+
+// ─── Chat-driven edits to an already-generated design system ───────────────
+
+export type AdditionalComponentsPatch = Partial<AdditionalComponents>
+
+export type TokensPatch = {
+  colors: Record<string, string> | null
+  typography: Record<string, unknown> | null
+  buttonComponent: string | null
+  additionalComponents: AdditionalComponentsPatch | null
+}
+
+export type EditInterpretation = {
+  assistantMessage: string
+  needsConfirmation: boolean
+  confirmationSummary: string | null
+  confirmsPendingEdit: boolean
+  patch: TokensPatch | null
+}
+
+type CurrentTokensContext = {
+  colors: Record<string, string>
+  typography: Record<string, unknown>
+  buttonComponent: string
+  additionalComponents: AdditionalComponents
+}
+
+const EDIT_INSTRUCTION = `Sos un asistente que aplica ediciones puntuales, por chat, a un design
+system YA GENERADO (colores, tipografía, y 5 componentes: Button, Input, Textarea, Alert, Badge).
+Te paso el estado actual de esos tokens/componentes como contexto en cada mensaje — nunca
+inventes valores para lo que no se te pidió cambiar, y nunca reescribas algo que no fue mencionado.
+
+## Regla 1 — Gestión flexible de tipografía
+
+- Si el usuario pide EXPLÍCITAMENTE dos tipografías (una para títulos, otra para texto), devolvé
+  "typography" con fontFamilyDisplay y fontFamily distintos, cada uno con el nombre exacto pedido
+  (conservando el resto del objeto typography sin cambios).
+- Si pide EXPLÍCITAMENTE una sola tipografía para todo el sistema, devolvé "typography" con
+  fontFamilyDisplay y fontFamily IGUALES a esa fuente — no fuerces una segunda tipografía.
+- Si el mensaje no menciona tipografía para nada, dejá "typography": null en el patch (no la
+  toques), y en assistantMessage sugerí — una sola vez por conversación, no lo repitas si ya lo
+  sugeriste antes en este historial — que se puede configurar una tipografía para títulos y otra
+  distinta para el texto. Ejemplo de tono: "Mantuve la tipografía actual, pero si querés podemos
+  configurar una fuente para títulos y otra para texto — ¿preferís dejar una sola o configurar
+  dos?".
+
+## Regla 2 — Mínima modificación y aislamiento de estilos
+
+- Un pedido sobre UN componente puntual (ej. "el botón", "el input", "el badge") tiene que
+  reflejarse SOLO en ese componente (buttonComponent, o UNA key de additionalComponents) — dejá
+  null todo lo demás: colors, typography, y los otros componentes no mencionados. Preferí resolver
+  el pedido con un cambio dentro del código de ESE componente (ej. una clase Tailwind puntual)
+  en vez de tocar un color semántico compartido (cualquier key de colors), aunque el pedido
+  mencione la palabra "color".
+- Un pedido que requiera cambiar un color semántico compartido (cualquier key de colors) o la
+  tipografía global SÍ afecta a todo el sistema — varios componentes lo usan y las escalas de
+  color derivadas se recalculan a partir de primary/secondary/foreground. Esto es un cambio
+  global/destructivo. En este caso respondé con needsConfirmation=true, confirmationSummary
+  explicando en una frase qué se va a afectar, Y IGUAL incluí el "patch" completo con el cambio
+  que aplicarías (el backend lo guarda pero NO lo aplica todavía hasta que el usuario confirme —
+  vos siempre describís el cambio real, nunca dejes "patch" vacío solo porque hace falta
+  confirmar). Usá lenguaje del usuario explícitamente amplio ("todo el sistema", "todos los
+  botones", "el primary en general") como señal real de que quiere un cambio global — si el
+  pedido suena acotado a un solo componente, preferí la resolución local de arriba en vez de
+  tocar colors.
+
+## Confirmación de un cambio pendiente
+
+Si el contexto que te paso incluye un cambio pendiente de confirmación (algo que vos mismo
+propusiste en un mensaje anterior), evaluá si el ÚLTIMO mensaje del usuario lo confirma
+afirmativamente (ej. "sí", "dale", "confirmá", "aplicalo", "hacelo"). Si lo confirma, respondé
+"confirmsPendingEdit": true (con needsConfirmation false, confirmationSummary null, patch null —
+el backend aplica el cambio que ya tenía guardado, no necesita que vuelvas a describirlo). Si el
+usuario en cambio pidió otra cosa distinta o rechazó el cambio, respondé "confirmsPendingEdit":
+false y tratá su último mensaje como un pedido nuevo (puede ser otro cambio quirúrgico, otro
+cambio global que requiera confirmación de nuevo, o simplemente una respuesta conversacional).
+
+${COMPONENT_CODE_CONSTRAINTS}
+
+## Formato de respuesta JSON exacto (sin markdown, sin texto adicional)
+
+{
+  "assistantMessage": "tu respuesta conversacional en español",
+  "needsConfirmation": false,
+  "confirmationSummary": "string explicando el cambio global propuesto, o null",
+  "confirmsPendingEdit": false,
+  "patch": {
+    "colors": { "key": "#hex" } o null si no cambian colores,
+    "typography": { "fontFamily": "...", "fontFamilyDisplay": "..." } o null si no cambia tipografía (si cambia, incluí el objeto typography completo, no solo las keys de fuente),
+    "buttonComponent": "código completo y actualizado del Button" o null si no cambia,
+    "additionalComponents": { "input": "código actualizado" } (SOLO las keys que cambian: input/alert/textarea/chip, cada una con su código completo) o null si ninguna cambia
+  }
+}
+
+"patch" describe SIEMPRE el cambio real que corresponde al pedido — incluso cuando
+needsConfirmation es true (el backend decide no aplicarlo todavía, pero necesita el patch real
+guardado para aplicarlo tal cual si el usuario confirma después, sin volver a generarlo). La
+ÚNICA vez que "patch" va en null es cuando confirmsPendingEdit es true (ahí se reusa el patch ya
+guardado) o cuando el mensaje no pide ningún cambio a los tokens (pregunta, charla, etc.).`
+
+export async function interpretDesignSystemEdit(
+  messages: ChatMessage[],
+  currentTokens: CurrentTokensContext,
+  pendingEdit: { summary: string } | null,
+): Promise<EditInterpretation> {
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    systemInstruction: EDIT_INSTRUCTION,
+    generationConfig: { responseMimeType: 'application/json' },
+  })
+
+  const history = messages.slice(0, -1).map((m) => ({
+    role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
+    parts: [{ text: m.content }],
+  }))
+
+  const lastMessage = messages[messages.length - 1]
+
+  const contextPrefix = `Estado actual del design system (contexto — no lo repitas en
+assistantMessage, y no inventes valores para lo que no se te pide cambiar):
+- colors: ${JSON.stringify(currentTokens.colors)}
+- typography: ${JSON.stringify(currentTokens.typography)}
+- buttonComponent: ${currentTokens.buttonComponent}
+- additionalComponents.input: ${currentTokens.additionalComponents.input}
+- additionalComponents.alert: ${currentTokens.additionalComponents.alert}
+- additionalComponents.textarea: ${currentTokens.additionalComponents.textarea}
+- additionalComponents.chip (Badge): ${currentTokens.additionalComponents.chip}
+${pendingEdit ? `\nCambio pendiente de confirmación que vos mismo propusiste antes: ${pendingEdit.summary}` : ''}
+
+Mensaje del usuario: ${lastMessage.content}`
+
+  const chat = model.startChat({ history })
+  const result = await chat.sendMessage(contextPrefix)
+
+  return JSON.parse(result.response.text()) as EditInterpretation
 }

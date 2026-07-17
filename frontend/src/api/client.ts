@@ -200,7 +200,13 @@ export const api = {
 
   chat: {
     message: (designSystemId: string, content: string) =>
-      apiFetch<{ message: string; brief: unknown }>('/chat/message', {
+      apiFetch<{
+        message: string
+        brief?: { isComplete: boolean } | null
+        tokens?: DesignTokens | null
+        wcagReport?: WcagReport | null
+        needsConfirmation?: boolean
+      }>('/chat/message', {
         method: 'POST', body: JSON.stringify({ designSystemId, content }),
       }),
     attachment: async (designSystemId: string, file: File): Promise<{ id: string; filename: string }> => {

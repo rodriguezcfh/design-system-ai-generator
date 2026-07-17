@@ -18,7 +18,7 @@ const COMPONENT_NAMES = ['Button', 'Input', 'Textarea', 'Alert', 'Badge'] as con
 const GENERATED_BANNER =
   '/* Archivo generado automáticamente en cada exportación — no editar a mano, se sobreescribe. */\n'
 
-function hasNamedExport(expectedName: string, code: string): boolean {
+export function hasNamedExport(expectedName: string, code: string): boolean {
   const declPatterns = [
     new RegExp(`export\\s+function\\s+${expectedName}\\s*\\(`),
     new RegExp(`export\\s+const\\s+${expectedName}\\b`),

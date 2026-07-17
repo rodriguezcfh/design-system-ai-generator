@@ -317,3 +317,94 @@ exponiendo `repository` (singular) en su respuesta — internamente ahora resuel
 `repositories` es la `STANDALONE`, para no romper el contrato que ya consume el frontend (el botón
 de "Desplegar en Vercel" solo tiene sentido para `STANDALONE`, `EMBEDDED` no tiene Storybook que
 desplegar).
+
+## Edición quirúrgica del design system vía chat (post-generación)
+
+### Por qué es una rama nueva y no una extensión del chat existente
+
+Hasta esta feature, el chat solo servía para armar el `BrandBrief` — `chat.service.ts`'s
+`sendMessage` llamaba siempre a `extractBrief`, sin mirar nunca el `status` del `DesignSystem`.
+Una vez generado, no había forma de pedir un ajuste puntual por chat; la única palanca era
+re-generar todo desde cero. Ahora `sendMessage` branchea en `ds.status`: `DRAFT` sigue exactamente
+el camino de siempre (armar brief), cualquier otro estado activa un camino de edición nuevo. Esto
+mantiene el flujo pre-generación con cero riesgo de regresión y separa dos operaciones que son
+conceptualmente distintas: "definir qué design system quiero" vs. "ajustar el que ya tengo".
+
+### Por qué el patch se persiste al pedir confirmación, en vez de re-generarlo al confirmar
+
+Primer diseño (descartado): pedir confirmación con solo un resumen en texto, y cuando el usuario
+dice que sí, volver a llamarle a Gemini con el historial completo para que reconstruya el cambio.
+Esto tiene un riesgo real de no-determinismo: nada garantiza que esa segunda llamada devuelva
+exactamente el mismo `patch` (sobre todo código de componentes) que el que describió el resumen —
+el usuario confirmaría una cosa y se aplicaría otra.
+
+Diseño adoptado: `interpretDesignSystemEdit` (en `gemini.service.ts`) siempre devuelve el `patch`
+real correspondiente al pedido, incluso cuando marca `needsConfirmation: true` — el modelo describe
+el cambio completo, y es el backend quien decide no aplicarlo todavía. Ese `patch` se persiste tal
+cual en `DesignSystem.pendingEditPatch` (más `pendingEditSummary` para mostrarle al usuario qué
+está pendiente). En el siguiente mensaje, se le pasa a Gemini ese resumen pendiente y se le pide
+que evalúe SOLO si el último mensaje del usuario lo confirma (`confirmsPendingEdit: boolean`) — si
+es así, el backend aplica el patch **guardado**, nunca uno recién generado. Si el usuario pidió
+otra cosa o rechazó el cambio, se descarta el pendiente y el mensaje se trata como uno nuevo. Esto
+elimina el riesgo de drift entre "lo que se confirmó" y "lo que se aplicó", y evita una
+regeneración de código innecesaria en el camino feliz. `pendingEditSummary`/`pendingEditPatch`
+también se limpian cuando corre `generateForDesignSystem` (una regeneración completa vuelve
+irrelevante cualquier propuesta pendiente).
+
+### Por qué la clasificación quirúrgico/global se fuerza en código
+
+El prompt de `EDIT_INSTRUCTION` le pide al modelo que marque `needsConfirmation: true` cuando el
+cambio toca un token compartido, y que prefiera un override local dentro del código de un
+componente cuando el pedido suena acotado a ese componente — pero `chat.service.ts` no confía
+ciegamente en ese criterio. Después de recibir la interpretación, fuerza
+`needsConfirmation = true` (sin importar lo que haya devuelto el modelo) apenas `patch.colors` o
+`patch.typography` no son `null`. Un pedido como "cambiá el borde del input" puede sonar acotado a
+un componente, pero si el modelo decide tocar `colors.border` (compartido con otros componentes),
+es un cambio global por definición — se evalúa por qué CAMPOS toca el patch, no por cómo sonaba el
+pedido.
+
+Tras un cambio de color: `colorScales` (determinista, vía `buildColorScaleFamily`/
+`buildNeutralScaleFamily` — el modelo nunca las calcula) se recalculan solo si el patch toca
+específicamente `primary`/`secondary`/`foreground` (las únicas que alimentan esas escalas hoy);
+el `wcagReport` (vía `validatePalette`, que ya valida el objeto completo, no un diff) se revalida
+siempre que cualquier color haya cambiado, aplicando también `enforcePaletteCompliance` igual que
+en la generación inicial.
+
+### Por qué se valida el contrato de export también al editar, no solo al exportar
+
+`assertValidComponentCode` (reusado tal cual de la generación inicial) solo chequea sintaxis TS e
+imports no permitidos — no chequea que el componente siga exportando el nombre esperado. Una
+edición que le pide a Gemini tocar el código de un componente YA EXISTENTE tiene más riesgo de
+romper ese contrato que una generación completa (guiada de punta a punta por el prompt de
+contrato fijo). `editTokens.service.ts` reutiliza `normalizeComponentExport` + `hasNamedExport`
+(de `lib/buildPackage.ts`, exportada para esto) para validar el export del componente patcheado
+antes de persistir — si falla, tira `PatchExportContractError` (nueva, distinta de
+`UnresolvableComponentExportError`, que es específicamente para datos legacy pre-contrato).
+
+### Por qué un enum de modo en vez de un campo de texto nuevo para tipografía
+
+"Solo se especificó `preferredHeadingFont`" es ambiguo entre dos intenciones reales: "el usuario
+todavía no decidió la fuente de texto" (caso `SEPARATE` incompleto) y "el usuario quiere una sola
+fuente para todo, deliberadamente" (caso `SINGLE`). En vez de un campo de texto nuevo que puede
+desincronizarse de `preferredHeadingFont`, se agrega `BrandBrief.preferredFontMode` (enum
+`UNSET | SINGLE | SEPARATE`). En `SINGLE`, la fuente única se guarda en la columna ya existente
+`preferredHeadingFont` (dejando `preferredBodyFont` en null) — `SYSTEM_INSTRUCTION` (brief),
+`GENERATION_INSTRUCTION` (generación completa) y `EDIT_INSTRUCTION` (edición) leen este modo
+explícitamente en vez de inferirlo de qué campos están en null.
+
+### Prisma y JSON: el merge es responsabilidad de `editTokens.service.ts`
+
+`prisma.designTokens.update({ data: { colors: {...} } })` sobre una columna `Json`/`Jsonb` es un
+reemplazo completo — Prisma no mergea JSON parcialmente. `editTokens.service.ts` re-lee
+`DesignTokens` con `findUniqueOrThrow` (nunca confía en un row leído antes de esperar la respuesta,
+lenta, de Gemini) y mergea a mano `additionalComponents`/`colors` sobre ese row recién leído antes
+de persistir — nunca reemplaza el JSON completo por el patch parcial.
+
+### Por qué "Generar" gana un guard de confirmación solo en el frontend
+
+`generateForDesignSystem` sigue haciendo un overwrite completo — comportamiento ya probado, sin
+cambios. Pero ahora que puede haber ediciones puntuales aprobadas por el usuario viviendo en
+`DesignTokens`, re-apretar "Generar" sobre un sistema ya generado es más destructivo/sorpresivo
+que antes. Se agrega un guard puramente de frontend (`window.confirm` nativo — no hay un
+componente modal en el codebase, no vale la pena crear uno para esto) en
+`DesignSystemPage.tsx`'s `handleGenerate`, sin tocar `generation.service.ts`.

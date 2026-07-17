@@ -80,6 +80,8 @@ export default function DesignSystemPage() {
       const result = await api.chat.message(id, content)
       setMessages(prev => [...prev, { role: 'assistant', content: result.message }])
       if (result.brief?.isComplete) setIsBriefComplete(true)
+      if (result.tokens) setTokens(result.tokens)
+      if (result.wcagReport) setWcagReport(result.wcagReport)
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Error al procesar tu mensaje. Intentá de nuevo.' }])
     } finally {
@@ -99,6 +101,12 @@ export default function DesignSystemPage() {
 
   async function handleGenerate() {
     if (!id || generatingRef.current) return
+    if (dsStatus !== 'DRAFT') {
+      const confirmed = window.confirm(
+        'Esto va a regenerar todo el design system desde cero y vas a perder cualquier ajuste puntual hecho por chat. ¿Continuar?',
+      )
+      if (!confirmed) return
+    }
     generatingRef.current = true
     setIsGenerating(true)
     setActiveTab('preview')

@@ -28,6 +28,13 @@ model DesignSystem {
   createdAt DateTime           @default(now()) @map("created_at")
   updatedAt DateTime           @updatedAt @map("updated_at")
 
+  // Set only while a chat-driven edit is awaiting user confirmation (global/destructive change
+  // — see editTokens.service.ts). Applying the confirmed edit always uses this stored patch,
+  // never a freshly re-generated one, to avoid drift between what was confirmed and what's
+  // applied. Cleared on confirm, on decline, and on a full regeneration.
+  pendingEditSummary String? @map("pending_edit_summary")
+  pendingEditPatch   Json?   @map("pending_edit_patch")
+
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversation Conversation?
   brandBrief   BrandBrief?
@@ -43,6 +50,12 @@ enum DesignSystemStatus {
   GENERATED
   APPROVED
   EXPORTED
+}
+
+enum BrandFontMode {
+  UNSET
+  SINGLE
+  SEPARATE
 }
 
 model Conversation {
@@ -81,6 +94,12 @@ model BrandBrief {
   preferredColors      Json?    @map("preferred_colors")
   preferredHeadingFont String?  @map("preferred_heading_font")
   preferredBodyFont    String?  @map("preferred_body_font")
+  // UNSET: no font preference stated yet. SINGLE: user wants one font for everything —
+  // stored in preferredHeadingFont, preferredBodyFont stays null. SEPARATE: two distinct
+  // fonts, one or both of preferredHeadingFont/preferredBodyFont set. Needed because
+  // "only preferredHeadingFont is set" is otherwise ambiguous between SINGLE and a
+  // still-incomplete SEPARATE answer.
+  preferredFontMode    BrandFontMode @default(UNSET) @map("preferred_font_mode")
   isComplete           Boolean  @default(false) @map("is_complete")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")

@@ -114,6 +114,31 @@ preferencias de una marca, genera a partir de eso un design system (paleta de co
   - El generador debe tener un test que falle si algún ejemplo de import/require documentado en
     el README no corresponde a una key real del `exports` de `package.json` — para que el README
     y el paquete nunca puedan desincronizarse silenciosamente.
+- **FR-011 — Edición quirúrgica del design system vía chat** *(nuevo por esta feature)*: una vez
+  generado un design system (`status != DRAFT`), el chat deja de armar el `BrandBrief` y pasa a
+  interpretar cada mensaje como un pedido de edición sobre los tokens/componentes ya existentes,
+  bajo dos reglas de comportamiento:
+  - **Gestión flexible de tipografía**: si el usuario pide explícitamente dos tipografías
+    (títulos y texto), se configuran por separado; si pide explícitamente una sola, se aplica esa
+    misma fuente a todo el sistema; si no menciona el tema, se mantiene la tipografía actual y el
+    asistente sugiere proactivamente (una sola vez por conversación) la opción de separar títulos
+    y texto.
+  - **Mínima modificación y aislamiento de estilos**: un pedido sobre un componente puntual (ej.
+    "cambiá el color del texto de un botón") se aplica quirúrgicamente — solo ese componente
+    cambia, nunca otros componentes, la paleta, ni la tipografía no mencionados. Si el pedido
+    requiere tocar un token compartido (cualquier color semántico o la tipografía global) o la
+    tipografía completa, el sistema NO lo aplica de inmediato: pide confirmación explícita al
+    usuario primero, explicando qué se va a ver afectado, y solo aplica el cambio (exactamente el
+    mismo que describió, no uno recalculado de nuevo) cuando el usuario confirma.
+  - Esta clasificación (quirúrgico vs. global) se determina por qué datos toca el cambio
+    (colores/tipografía compartidos = global, código propio de un solo componente = quirúrgico),
+    no por cómo suena el pedido en lenguaje natural.
+  - Un componente editado sigue pasando por las mismas validaciones que en la generación inicial
+    (sin sintaxis TypeScript, sin imports fuera de `react`, y sin romper su contrato de export
+    nombrado) antes de persistirse.
+  - Regenerar todo el sistema desde cero (botón "Generar") sigue siendo una acción aparte,
+    explícita, que no pasa por estas reglas — pero le pide confirmación al usuario si ya hay un
+    design system generado, porque ahora puede haber ediciones puntuales que se perderían.
 
 ## Fuera de alcance (por ahora)
 

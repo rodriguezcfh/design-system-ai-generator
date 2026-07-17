@@ -107,6 +107,7 @@ describe('POST /api/design-systems/:id/generate', () => {
     const briefWithPreferences = {
       ...fakeBrief,
       preferredColors: ['#0077B6', '#00F5D4'],
+      preferredFontMode: 'SEPARATE',
       preferredHeadingFont: 'Kiona',
       preferredBodyFont: 'Montserrat',
     }
@@ -121,6 +122,7 @@ describe('POST /api/design-systems/:id/generate', () => {
     expect(geminiService.generateDesignSystem).toHaveBeenCalledWith(
       expect.objectContaining({
         preferredColors: ['#0077B6', '#00F5D4'],
+        preferredFontMode: 'SEPARATE',
         preferredHeadingFont: 'Kiona',
         preferredBodyFont: 'Montserrat',
       }),
@@ -133,6 +135,19 @@ describe('POST /api/design-systems/:id/generate', () => {
       accent: { familyName: expect.any(String), shades: expect.any(Object) },
       neutral: { familyName: 'Neutral', shades: expect.any(Object) },
     })
+  })
+
+  it('clears any pending chat-edit confirmation on a full regeneration', async () => {
+    vi.mocked(prisma.designSystem.findFirst).mockResolvedValue(fakeDS)
+    vi.mocked(prisma.brandBrief.findUnique).mockResolvedValue(fakeBrief)
+    vi.mocked(geminiService.generateDesignSystem).mockResolvedValue(fakeGeneratedDS)
+    vi.mocked(prisma.designTokens.upsert).mockResolvedValue(fakeTokensRecord)
+    vi.mocked(prisma.designSystem.update).mockResolvedValue({ ...fakeDS, status: 'GENERATED' })
+
+    await request(app).post('/api/design-systems/ds-1/generate').set(auth)
+
+    const updateArg = vi.mocked(prisma.designSystem.update).mock.calls[0][0]
+    expect(updateArg.data).toMatchObject({ status: 'GENERATED', pendingEditSummary: null })
   })
 
   it('auto-corrects a Gemini palette that fails contrast instead of returning allPass false', async () => {
